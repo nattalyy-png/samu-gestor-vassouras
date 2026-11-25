@@ -1,6 +1,6 @@
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
-import { doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
 const env = await initializeTestEnvironment({ projectId: 'demo-samu', firestore: { rules: readFileSync('rules-copy.rules', 'utf8'), host: '127.0.0.1', port: 8080 } });
 let ok = 0, fail = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✓', name); } catch (e) { fail++; console.log('✗', name, e.message); } };
@@ -61,6 +61,17 @@ await t('coord não muda texto', assertFails(updateDoc(doc(db('coord'), 'sugesto
 // log
 await t('p1 registra ação', assertSucceeds(addDoc(collection(db('p1'), 'log'), { user: 'p1', acao: 'x', quando: serverTimestamp() })));
 await t('p1 não lê log', assertFails(getDocs(collection(db('p1'), 'log'))));
+// andamento e pedidos de acesso
+await t('coord marca andamento', getDocs(query(collection(db('coord'), 'checklists'), where('user', '==', 'p1'))).then(s => assertSucceeds(updateDoc(s.docs[0].ref, { andamento: { 0: { st: 'Resolvido' } } }))));
+await t('p1 NÃO marca andamento', getDocs(query(collection(db('p1'), 'checklists'), where('user', '==', 'p1'))).then(s => assertFails(updateDoc(s.docs[0].ref, { andamento: { 0: { st: 'Resolvido' } } }))));
+const ped = { nome: 'Maria da Silva', email: 'maria@x.com', cargo: 'TE', quando: serverTimestamp() };
+await t('anônimo pede acesso', assertSucceeds(setDoc(doc(anon, 'pedidosAcesso/maria'), ped)));
+await t('pedido repetido bloqueado', assertFails(setDoc(doc(anon, 'pedidosAcesso/maria'), ped)));
+await t('pedido com perfil bloqueado', assertFails(setDoc(doc(anon, 'pedidosAcesso/m2'), { ...ped, perfil: 'admin' })));
+await t('pedido com e-mail inválido bloqueado', assertFails(setDoc(doc(anon, 'pedidosAcesso/m3'), { ...ped, email: 'xx' })));
+await t('anônimo não lê pedidos', assertFails(getDoc(doc(anon, 'pedidosAcesso/maria'))));
+await t('plantonista não lê pedidos', assertFails(getDoc(doc(db('p1'), 'pedidosAcesso/maria'))));
+await t('coord lê e apaga pedido', assertSucceeds(getDoc(doc(db('coord'), 'pedidosAcesso/maria')).then(() => deleteDoc(doc(db('coord'), 'pedidosAcesso/maria')))));
 // desativação
 await t('admin desativa p2', assertSucceeds(updateDoc(doc(db('denise'), 'users/p2'), { ativo: false })));
 await t('p2 desativado não envia', assertFails(addDoc(collection(db('p2'), 'checklists'), reg('p2'))));

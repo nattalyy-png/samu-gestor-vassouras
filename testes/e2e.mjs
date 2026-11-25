@@ -79,6 +79,11 @@ await step('celular: menu inferior da gestão', async () => {
 });
 await step('listas em seções', async () => { await tab('Listas e ofícios'); await page.click('summary:has-text("Motivos de negativa")'); await page.locator('details.motivo summary').first().click(); await shot('33-listas-secoes'); });
 await sair();
+await step('pedido de acesso pela tela de entrada', async () => {
+  await page.click('#pedirBtn'); await page.fill('#qnome', 'Joana Teste Pereira'); await page.fill('#qemail', 'joana@teste.com'); await page.fill('#qcargo', 'Técnica');
+  await page.click('#fpedido button'); await page.waitForSelector('text=Pedido enviado', { timeout: 10000 }); await shot('20-pedido-acesso');
+  await page.goto(URL); await page.click('#pedirBtn'); await page.fill('#qnome', 'Joana Teste Pereira'); await page.fill('#qemail', 'joana@teste.com'); await page.click('#fpedido button'); await page.waitForSelector('text=Já existe um pedido', { timeout: 10000 });
+});
 await setPass('coord@teste.com', 'coord123'); await setPass('carla@teste.com', 'carla123');
 
 await step('coordenador lança escala', async () => {
@@ -139,6 +144,11 @@ await step('coordenador: relatório PDF', async () => {
   const [d] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#rPdf')]); await d.saveAs(`${SHOTS}/relatorio.pdf`);
 });
 await step('coordenador: muda cargo', async () => { await tab('Funcionários'); page.once('dialog', d => d.accept('Enfermeira')); await page.locator('.precard', { hasText: 'carla@teste.com' }).locator('[data-cargo]').click(); await page.waitForSelector('.precard:has-text("carla@teste.com") >> text=Enfermeira'); });
+await step('coordenador aprova pedido de acesso', async () => {
+  await tab('Funcionários'); await page.waitForSelector('h2:has-text("Pedidos de acesso (1)")'); await shot('21-pedidos-acesso');
+  page.once('dialog', d => d.accept()); await page.click('[data-aprovar="0"]'); await page.waitForSelector('.precard:has-text("joana@teste.com") >> text=Ativo', { timeout: 15000 });
+  if (await page.$('h2:has-text("Pedidos de acesso")')) throw new Error('pedido continua');
+});
 await step('coordenador: desativa Rafael', async () => {
   await tab('Funcionários'); const row = page.locator('.precard', { hasText: 'Rafael Lima' }); await row.locator('[data-ativo]').click(); await page.waitForSelector('.precard:has-text("Rafael Lima") >> text=Desativado');
 });
@@ -157,7 +167,7 @@ await step('admin troca para modo plantonista e volta', async () => {
 });
 await step('admin vê ofícios', async () => { await tab('Solicitações e ofícios'); await page.waitForSelector('td:has-text("001/")'); });
 await step('celular: tela do plantonista', async () => {
-  await sair(); await page.setViewportSize({ width: 390, height: 844 }); await login('carla@teste.com', 'carla123'); await shot('15-celular-inicio');
+  await sair(); await page.setViewportSize({ width: 390, height: 844 }); await login('carla@teste.com', 'carla123'); await page.waitForSelector('text=Pendências que você apontou'); await page.waitForSelector('.pill:has-text("Em andamento")'); await shot('15-celular-inicio');
   await tab('Checklist'); await shot('16-celular-checklist');
 });
 console.log('\nErros no navegador:', erros.length ? erros.join('\n') : 'nenhum');

@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 17h05';
+const VERSAO = '25/11 17h30';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -142,6 +142,16 @@ async function renderLogin() {
       <button class="primary" type="submit">Entrar</button>
       <button type="button" class="linkbtn" id="esqueci">Esqueci minha senha</button>
     </form>
+    ${primeiro ? '' : `<button type="button" class="linkbtn" id="pedirBtn">Ainda não tem acesso? Pedir cadastro</button>
+    <form id="fpedido" class="card" style="border:0;padding:0" hidden>
+      <h2>Pedir cadastro</h2>
+      <p class="small muted">Digite seu nome completo, como está na escala. A coordenação confere e libera. Depois você recebe um e-mail para criar a senha.</p>
+      <label>Nome completo<input id="qnome" required minlength="5" maxlength="100" autocomplete="name"></label>
+      <label>E-mail<input id="qemail" type="email" required maxlength="99" autocomplete="email"></label>
+      <label>Cargo<input id="qcargo" maxlength="60" placeholder="Ex.: Técnica de enfermagem"></label>
+      <p id="qmsg" class="small" hidden></p>
+      <button class="primary" type="submit">Enviar pedido</button>
+    </form>`}
     ${primeiro ? `<hr style="border:0;border-top:1px solid var(--line);width:100%">
     <h2>Primeiro acesso do sistema</h2>
     <p class="small muted">Ainda não existe administração cadastrada. A conta criada aqui será a administração técnica (Denise). Isso só aparece uma vez.</p>
@@ -164,6 +174,18 @@ async function renderLogin() {
     if (!em) { $('lerro').textContent = 'Digite seu e-mail acima e clique de novo em "Esqueci minha senha".'; $('lerro').hidden = false; return; }
     try { await sendPasswordResetEmail(auth, em); toast('Se o e-mail estiver cadastrado, chegará um link para criar nova senha.'); }
     catch (err) { $('lerro').textContent = msgErro(err); $('lerro').hidden = false; }
+  };
+  if ($('pedirBtn')) $('pedirBtn').onclick = () => { $('fpedido').hidden = false; $('pedirBtn').hidden = true; $('qnome').focus(); };
+  if ($('fpedido')) $('fpedido').onsubmit = async e => {
+    e.preventDefault();
+    const nome = $('qnome').value.trim().replace(/\s+/g, ' '), email = $('qemail').value.trim().toLowerCase(), cargo = $('qcargo').value.trim();
+    const msg = (t, ok) => { $('qmsg').textContent = t; $('qmsg').className = 'small ' + (ok ? 'ok' : 'err'); $('qmsg').hidden = false; };
+    if (nome.split(' ').length < 2) { msg('Digite o nome completo (nome e sobrenome).'); return; }
+    const btn = $('fpedido').querySelector('button'); btn.disabled = true;
+    try {
+      await setDoc(doc(db, 'pedidosAcesso', email.replace(/[^a-z0-9]/g, '_')), { nome, email, cargo, quando: serverTimestamp() });
+      $('fpedido').innerHTML = '<div class="aviso ok">✓ Pedido enviado. Quando a coordenação liberar, chega um e-mail para você criar a senha (veja também o spam).</div>';
+    } catch (err) { btn.disabled = false; msg(String(err.code || '').includes('permission') ? 'Já existe um pedido com este e-mail. Aguarde a liberação ou fale com a coordenação.' : msgErro(err)); }
   };
   if (primeiro) $('fsetup').onsubmit = async e => {
     e.preventDefault(); $('serro').hidden = true;
@@ -259,6 +281,7 @@ VIEWS.inicio = async () => {
     ${tile('escala', 'ESC', '#E7F5EE', '#166534', 'Minha escala', 'Próximos plantões')}
     ${tile('sugestoes', 'IDEIA', '#F1ECFB', '#5B3A9E', 'Sugestões', 'Ideias para o app')}
   </div>
+  ${(() => { const lim = diaStr(new Date(Date.now() - 7 * 864e5)); const ps = cks.filter(c => c.dia >= lim).flatMap(c => (c.itens || []).map((it, k) => ({ ...it, c, a: (c.andamento || {})[k] })).filter(it => it.s !== 'ok')); return ps.length ? `<div class="card"><h2>Pendências que você apontou (7 dias)</h2>${ps.map(p => `<div class="viat"><span><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${fmtDia(p.c.dia)} · ${SITU[p.s] || p.s}${p.a?.obs ? ' · ' + esc(p.a.obs) : ''}</span></span><span class="pill ${p.a?.st === 'Resolvido' ? 'ok' : p.a?.st === 'Em andamento' ? 'warn' : 'neutral'}">${esc(p.a?.st || 'Pendente')}</span></div>`).join('')}</div>` : ''; })()}
   <div class="card"><h2>Próximos plantões</h2>${prox.length ? `<div class="tablewrap"><table><tr><th>Data</th><th>Plantão</th></tr>${prox.map(e => `<tr><td>${fmtDia(e.data)}</td><td>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.turno)}${e.viatura ? ' · ' + esc(e.viatura) : ''}</td></tr>`).join('')}</table></div>` : '<p class="empty">Nenhum plantão lançado na escala.</p>'}</div>`;
 };
 BIND.inicio = () => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const t = b.querySelector('.ic')?.textContent; if (t === 'USB' || t === 'USA') { ui.ckTipo = t; ui.ckViatura = null; ui.ckItens = null; } go(b.dataset.go); });
@@ -726,7 +749,17 @@ VIEWS.funcionarios = async () => {
   const simples = t => normNome(t).replace(/(.)\1/g, '$1').split(' ').filter(w => w.length > 2);
   const parecido = (a, b) => { const x = simples(a), y = simples(b); if (!x.length || !y.length) return 0; const comuns = x.filter(w => y.includes(w)).length; return (x[0] === y[0] ? 2 : 0) + comuns; };
   ui.pre.forEach(p => { let best = null, sc = 0; eq.forEach(u => { const v = parecido(p.nome, u.nome); if (v > sc) { sc = v; best = u; } }); p.sugestao = sc >= 3 ? best : null; });
+  ui.pedAc = rows(await getDocs(C('pedidosAcesso'))).sort((a, b) => (a.quando?.seconds || 0) - (b.quando?.seconds || 0));
+  ui.pedAc.forEach(q => { let best = -1, sc = 0; ui.pre.forEach((p, i) => { const v = parecido(q.nome, p.nome); if (v > sc) { sc = v; best = i; } }); q.sug = sc >= 3 ? best : -1; q.jaTem = eq.find(u => u.email === q.email); });
   return `<h1>Funcionários</h1>
+  ${ui.pedAc.length ? `<div class="card" style="border:2px solid var(--accent)"><h2>Pedidos de acesso (${ui.pedAc.length})</h2>
+  <p class="small muted">Pessoas que pediram cadastro pelo link da tela de entrada. Confira se é mesmo a pessoa, escolha o nome dela na escala e clique em Aprovar. Só depois disso ela recebe o e-mail para criar a senha.</p>
+  <div class="precad">${ui.pedAc.map((q, i) => `<div class="precard"><div><b>${esc(q.nome)}</b><br><span class="small muted">${esc(q.email)}${q.quando ? ' · ' + fmt(q.quando) : ''}</span></div>
+    ${q.jaTem ? `<div class="aviso">⚠ Este e-mail já é de ${esc(q.jaTem.nome)}.</div>` : ''}
+    <label>Nome na escala<select id="qa${i}"><option value="-1">Não está na escala (usar o nome digitado)</option>${ui.pre.map((p, k) => `<option value="${k}" ${q.sug === k ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></label>
+    <label>Cargo<input id="qc${i}" value="${esc(q.cargo || (q.sug >= 0 ? ui.pre[q.sug].cargo : ''))}"></label>
+    <label>Perfil<select id="qp${i}">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></label>
+    <div class="row"><button class="primary" data-aprovar="${i}" ${q.jaTem ? 'disabled' : ''}>Aprovar e enviar senha</button><button class="ghost" data-recusar="${i}">Recusar</button></div></div>`).join('')}</div></div>` : ''}
   ${ui.pre.length ? `<div class="card"><h2>Pré-cadastro da escala (${ui.pre.length} pessoas)</h2>
   <p class="small muted">Estas pessoas estão na escala mas ainda não têm acesso. Confira o cargo, digite o e-mail e clique em Cadastrar: a pessoa recebe o e-mail para criar a senha e os plantões dela já ficam ligados.</p>
   <div class="precad">${ui.pre.map((p, i) => `<div class="precard"><div><b>${esc(p.nome)}</b> <span class="small muted">· ${p.n} plantão(ões)</span></div>
@@ -784,6 +817,19 @@ BIND.funcionarios = () => {
       registrarAcao(`Ligou ${pend.length} plantão(ões) de "${p.nome}" ao cadastro de ${u.nome}`);
       toast(`${pend.length} plantão(ões) ligados a ${u.nome}.`); render();
     } catch (e) { alertaErro(msgErro(e)); b.disabled = false; }
+  });
+  document.querySelectorAll('[data-aprovar]').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.aprovar, q = ui.pedAc[i], k = +$('qa' + i).value;
+    const nome = k >= 0 ? ui.pre[k].nome : nomeBonito(q.nome), funcao = $('qc' + i).value.trim(), perfil = $('qp' + i).value;
+    if (!confirm(`Aprovar o acesso de ${nome} (${q.email}) como ${perfilNome(perfil)}?`)) return;
+    b.disabled = true; b.textContent = 'Aprovando…';
+    try { const n = await cadastrarFuncionario(nome, q.email, funcao, perfil); await deleteDoc(doc(db, 'pedidosAcesso', q.id)); registrarAcao(`Aprovou o pedido de acesso de ${q.nome} (${q.email})`); toast(`${nome} liberado(a)${n ? `, ${n} plantão(ões) ligados` : ''}. E-mail de senha enviado.`); render(); }
+    catch (e) { alertaErro(msgErro(e)); b.disabled = false; b.textContent = 'Aprovar e enviar senha'; }
+  });
+  document.querySelectorAll('[data-recusar]').forEach(b => b.onclick = async () => {
+    const q = ui.pedAc[+b.dataset.recusar];
+    if (!confirm(`Recusar e apagar o pedido de ${q.nome} (${q.email})?`)) return;
+    try { await deleteDoc(doc(db, 'pedidosAcesso', q.id)); registrarAcao(`Recusou o pedido de acesso de ${q.nome} (${q.email})`); toast('Pedido recusado'); render(); } catch (e) { alertaErro(msgErro(e)); }
   });
   document.querySelectorAll('[data-pre]').forEach(b => b.onclick = async () => {
     const i = +b.dataset.pre, p = ui.pre[i];

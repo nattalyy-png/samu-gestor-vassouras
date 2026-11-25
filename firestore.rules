@@ -105,6 +105,18 @@ service cloud.firestore {
       allow read, create, update: if isGestao();
       allow delete: if isAdmin();
     }
+    // Pedido de cadastro feito pela própria pessoa na tela de entrada (sem login).
+    // Só cria (o id é o e-mail, então não dá para mandar dois); quem lê e apaga é a gestão.
+    match /pedidosAcesso/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['nome', 'email', 'cargo', 'quando'])
+        && request.resource.data.nome is string && request.resource.data.nome.size() >= 5 && request.resource.data.nome.size() <= 100
+        && request.resource.data.email is string && request.resource.data.email.size() <= 100
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && request.resource.data.cargo is string && request.resource.data.cargo.size() <= 60
+        && request.resource.data.quando == request.time;
+      allow read, delete: if isGestao();
+      allow update: if false;
+    }
     match /log/{id} {
       allow read: if isGestao();
       allow create: if active() && request.resource.data.user == request.auth.uid
