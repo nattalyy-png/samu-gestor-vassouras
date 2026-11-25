@@ -230,3 +230,4 @@ details.esc-add[open]{display:grid;gap:10px}
 details.esc-add .grid2{gap:10px}
 details.esc-add select{background:#fff}
 .esc-info .pill{white-space:normal;max-width:100%}
+.precad .sep-admin{grid-column:1/-1;margin-top:8px;font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}

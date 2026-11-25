@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 18h30';
+const VERSAO = '25/11 18h45';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -392,7 +392,9 @@ BIND.inter = () => $('iEnviar').onclick = () => {
 
 async function equipeDoDia(dia) { return rows(await getDocs(query(C('escala'), where('data', '==', dia)))).sort((a, b) => (a.turno || '').localeCompare(b.turno || '') || (a.cargo || '').localeCompare(b.cargo || '') || a.userNome.localeCompare(b.userNome)); }
 function selosEscala(e) {
-  return `${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}${e.origem === 'substituicao' ? ` <span class="pill ok">no lugar de ${esc(e.substitui || '')}</span>` : ''}${e.origem === 'avulso' ? ' <span class="pill ok">incluído no dia</span>' : ''}${e.substituidoPor ? ` <span class="pill neutral">substituído por ${esc(e.substituidoPor)}</span>` : ''}`;
+  // troca e extra: só a gestão e quem lançou veem a etiqueta
+  const ver = gestao() || (me && (e.criadoPor === me.uid || (e.trocaDe && e.trocaDe === me.nome)));
+  return `${ver && e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${ver && e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}${e.origem === 'substituicao' ? ` <span class="pill ok">no lugar de ${esc(e.substitui || '')}</span>` : ''}${e.origem === 'avulso' ? ' <span class="pill ok">incluído no dia</span>' : ''}${e.substituidoPor ? ` <span class="pill neutral">substituído por ${esc(e.substituidoPor)}</span>` : ''}`;
 }
 function listaEquipe(lista) {
   if (!lista.length) return '<p class="empty">Ninguém lançado na escala neste dia.</p>';
@@ -423,7 +425,7 @@ function calendario(mes, plantoes, pedidos = []) {
 VIEWS.escala = async () => {
   if (!ui.escMes) ui.escMes = mesStr();
   const [minhas, prox, pedidos, colegas] = await Promise.all([meus('escala', ui.escMes), meus('escala', addMes(mesStr(), 1)), getDocs(query(C('pedidos'), where('user', '==', me.uid))).then(rows).catch(() => []), getDocs(C('users')).then(rows).catch(() => [])]);
-  ui.colegas = colegas.filter(u => u.ativo && u.id !== me.uid).sort((a, b) => a.nome.localeCompare(b.nome));
+  ui.colegas = colegas.filter(u => u.ativo && u.perfil !== 'admin' && u.id !== me.uid).sort((a, b) => a.nome.localeCompare(b.nome));
   pedidos.sort(porQuando);
   const hoje = diaStr();
   const futuros = [...(ui.escMes === mesStr() ? minhas : await meus('escala')), ...prox].filter(e => e.data >= hoje).sort((a, b) => a.data.localeCompare(b.data));
@@ -818,11 +820,11 @@ VIEWS.funcionarios = async () => {
   <label>Perfil<select id="fp">${perfis.map(p => `<option value="${p}">${perfilNome(p)}</option>`).join('')}</select></label></div>
   <button class="primary" id="fAdd">Cadastrar e enviar e-mail de senha</button>
   <p class="small muted">O funcionário recebe um e-mail para criar a própria senha (veja também a caixa de spam).</p></div>
-  <div class="card"><h2>Equipe (${eq.filter(u => u.ativo).length} ativos)</h2><div class="precad">
-  ${eq.map(u => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<div class="precard"><div><b>${esc(u.nome)}</b> ${u.ativo ? '<span class="pill ok">Ativo</span>' : '<span class="pill neutral">Desativado</span>'}<br><span class="small muted">${esc(u.email)}</span></div>
+  <div class="card"><h2>Equipe (${eq.filter(u => u.ativo && u.perfil !== 'admin').length} ativos)</h2><div class="precad">
+  ${[...eq.filter(u => u.perfil !== 'admin'), ...eq.filter(u => u.perfil === 'admin')].map((u, i, arr) => `${u.perfil === 'admin' && (i === 0 || arr[i - 1].perfil !== 'admin') ? '<h3 class="sep-admin">Administração do app (não entra na escala)</h3>' : ''}` + (() => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<div class="precard"><div><b>${esc(u.nome)}</b> ${u.ativo ? '<span class="pill ok">Ativo</span>' : '<span class="pill neutral">Desativado</span>'}<br><span class="small muted">${esc(u.email)}</span></div>
     <div class="row" style="justify-content:space-between"><span>Cargo: <b>${esc(u.funcao || '—')}</b></span>${pode ? `<button data-cargo="${u.id}">✎ Mudar cargo</button>` : ''}</div>
     <label>Perfil ${pode && u.id !== me.uid ? `<select data-perfil="${u.id}">${perfis.map(p => `<option value="${p}" ${p === u.perfil ? 'selected' : ''}>${perfilNome(p)}</option>`).join('')}</select>` : `<b>${esc(perfilNome(u.perfil))}</b>`}</label>
-    <div class="row">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></div></div>`; }).join('')}
+    <div class="row">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></div></div>`; })()).join('')}
   </div><p class="small muted">Desativar bloqueia o acesso imediatamente e mantém o histórico do funcionário.</p></div>`;
 };
 // Cria a conta, envia o e-mail de senha e liga os plantões da escala com o mesmo nome.
