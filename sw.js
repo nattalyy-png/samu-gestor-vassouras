@@ -1,6 +1,6 @@
 // Service worker simples: permite instalar o app e abrir a tela mesmo sem internet.
 // Os dados ficam no cache do Firebase (registros feitos sem sinal são enviados quando a internet volta).
-const CACHE = 'samu-gestor-v8';
+const CACHE = 'samu-gestor-v9';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'escala-parser.js', 'firebase-config.js', 'logo-completa.png', 'logo-simbolo.png', 'icone-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 17h30';
+const VERSAO = '25/11 18h00';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -372,6 +372,11 @@ function listaEquipe(lista) {
   const grupos = {}; lista.forEach(e => (grupos[e.turno || 'Plantão'] ||= []).push(e));
   return Object.entries(grupos).map(([t, es]) => `<h3 style="margin-top:8px">${esc(t)}</h3>${es.map(e => `<div class="viat"><span>${esc(e.userNome)}${me && e.user === me.uid ? ' <b>(você)</b>' : ''}<br><span class="small muted">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}</span></span><span>${e.codigo ? `<span class="pill neutral">${esc(e.codigo)}</span>` : ''}${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</span></div>`).join('')}`).join('');
 }
+function listaEquipeHoje(lista) {
+  if (!lista.length) return '<p class="empty">Ninguém lançado na escala hoje.</p>';
+  const grupos = {}; lista.forEach(e => (grupos[e.turno || 'Plantão'] ||= []).push(e));
+  return Object.entries(grupos).map(([t, es]) => `<div class="esc-turno"><h3>${esc(t)} <span class="muted">(${es.length})</span></h3><div class="esc-grade">${es.sort((a, b) => (a.viatura || '').localeCompare(b.viatura || '') || (a.userNome || '').localeCompare(b.userNome || '')).map(e => `<div class="esc-pessoa"><div class="esc-nome">${esc(e.userNome)}</div><div class="esc-info">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}${e.codigo ? ' · ' + esc(e.codigo) : ''}${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</div></div>`).join('')}</div></div>`).join('');
+}
 async function mostrarEquipe(dia, alvo) {
   alvo.innerHTML = '<p class="muted">Carregando…</p>';
   try { const l = await equipeDoDia(dia); alvo.innerHTML = `<div class="card" style="margin-top:12px;background:var(--bg)"><h2>Plantão de ${fmtDia(dia)}</h2>${listaEquipe(l)}</div>`; alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
@@ -471,7 +476,7 @@ VIEWS.painel = async () => {
     <div class="stat"><span>Itens pendentes</span><b style="color:${pend.length ? 'var(--bad)' : 'var(--ok)'}">${pend.length}</b></div>
     <div class="stat"><span>Material abaixo do mínimo</span><b style="color:${baixos.length ? 'var(--bad)' : 'var(--ok)'}">${baixos.length}</b></div>
     <div class="stat"><span>Intercorrências hoje</span><b>${interH.length}</b></div></div>
-  <div class="card"><h2>Escala de hoje (${escHoje.length})</h2>${listaEquipe(escHoje)}</div>
+  <div class="card esc-hoje"><h2>Escala de hoje (${escHoje.length})</h2>${listaEquipeHoje(escHoje)}</div>
   <div class="grid2">
     <div class="card"><h2>Situação das viaturas</h2>${vs.map(v => { const s = statusV(v); return `<div class="viat"><div><b>${esc(v.id)}</b><br><span class="small muted">${s.ck ? 'Último checklist: ' + fmt(s.ck.quando) + ' · ' + esc(s.ck.userNome) : 'Sem checklist hoje'}</span></div>${s.pill}</div>`; }).join('')}</div>
     <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span>${p.a ? `<br><span class="small muted">${esc(p.a.st)}${p.a.obs ? ': ' + esc(p.a.obs) : ''} · ${esc(p.a.por)}</span>` : ''}</div><div style="display:grid;gap:4px;justify-items:end"><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${SITU[p.s] || p.s}</span><select data-and="${p.c.id}|${p.k}" aria-label="Andamento">${['Pendente', 'Em andamento', 'Resolvido'].map(o => `<option ${(p.a?.st || 'Pendente') === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}${resolvidas ? `<p class="small muted">${resolvidas} resolvida(s) hoje (aparecem no relatório).</p>` : ''}</div></div>

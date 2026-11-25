@@ -193,3 +193,14 @@ nav.bottom.so-celular{display:none}
 .banner-plant{max-width:720px;margin:14px auto 0;background:rgba(255,255,255,.16);border-radius:12px;padding:8px 12px;font-size:.82rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
 .banner-plant .modo{width:auto;grid-auto-flow:column;align-items:center}
 .banner-plant select{padding:4px 8px}
+
+/* Escala de hoje no painel do gestor: fundo suave e lista compacta */
+.card.esc-hoje{background:#eef3f9;border-color:#d6e0ec;padding:14px 16px;gap:10px}
+.card.esc-hoje h2{font-size:1.05rem}
+.esc-turno{display:grid;gap:6px}
+.esc-turno h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--navy)}
+.esc-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.esc-pessoa{background:#ffffff;border:1px solid #d6e0ec;border-radius:8px;padding:6px 10px;min-width:0}
+.esc-nome{font-weight:600;font-size:.88rem;line-height:1.3;overflow-wrap:anywhere}
+.esc-info{font-size:.76rem;color:var(--muted);line-height:1.3}
+.esc-info .pill{font-size:.68rem;padding:1px 7px}
