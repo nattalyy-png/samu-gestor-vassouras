@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 16h45';
+const VERSAO = '25/11 16h55';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -742,7 +742,7 @@ VIEWS.funcionarios = async () => {
   <button class="primary" id="fAdd">Cadastrar e enviar e-mail de senha</button>
   <p class="small muted">O funcionário recebe um e-mail para criar a própria senha (veja também a caixa de spam).</p></div>
   <div class="card"><h2>Equipe (${eq.filter(u => u.ativo).length} ativos)</h2><div class="tablewrap"><table><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Perfil</th><th>Situação</th><th></th></tr>
-  ${eq.map(u => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${esc(u.funcao)}</td>
+  ${eq.map(u => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${esc(u.funcao)}${pode ? ` <button class="ghost" data-cargo="${u.id}" style="padding:2px 8px;font-size:.8rem">Mudar</button>` : ''}</td>
     <td>${pode && u.id !== me.uid ? `<select data-perfil="${u.id}" style="width:auto">${perfis.map(p => `<option value="${p}" ${p === u.perfil ? 'selected' : ''}>${perfilNome(p)}</option>`).join('')}</select>` : esc(perfilNome(u.perfil))}</td>
     <td>${u.ativo ? '<span class="pill ok">Ativo</span>' : '<span class="pill neutral">Desativado</span>'}</td>
     <td class="row" style="flex-wrap:nowrap">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></td></tr>`; }).join('')}
@@ -800,6 +800,12 @@ BIND.funcionarios = () => {
   document.querySelectorAll('[data-ativo]').forEach(b => b.onclick = async () => {
     const u = ui.equipe.find(x => x.id === b.dataset.ativo);
     try { await updateDoc(doc(db, 'users', u.id), { ativo: !u.ativo }); registrarAcao(`${u.ativo ? 'Desativou' : 'Reativou'} ${u.nome}`); render(); } catch (e) { alertaErro(msgErro(e)); }
+  });
+  document.querySelectorAll('[data-cargo]').forEach(b => b.onclick = async () => {
+    const u = ui.equipe.find(x => x.id === b.dataset.cargo);
+    const novo = (prompt(`Novo cargo de ${u.nome}:`, u.funcao || '') || '').trim();
+    if (!novo || novo === u.funcao) return;
+    try { await updateDoc(doc(db, 'users', u.id), { funcao: novo }); registrarAcao(`Mudou o cargo de ${u.nome}: ${u.funcao || '—'} → ${novo}`); toast('Cargo atualizado'); render(); } catch (e) { alertaErro(msgErro(e)); }
   });
   document.querySelectorAll('[data-senha]').forEach(b => b.onclick = async () => {
     try { await sendPasswordResetEmail(auth, b.dataset.senha); toast('E-mail de senha enviado'); } catch (e) { alertaErro(msgErro(e)); }

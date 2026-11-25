@@ -138,6 +138,7 @@ await step('coordenador: relatório PDF', async () => {
   await tab('Relatórios'); await shot('13-coord-relatorio');
   const [d] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#rPdf')]); await d.saveAs(`${SHOTS}/relatorio.pdf`);
 });
+await step('coordenador: muda cargo', async () => { await tab('Funcionários'); page.once('dialog', d => d.accept('Enfermeira')); await page.locator('tr', { hasText: 'Carla Mendes' }).locator('[data-cargo]').click(); await page.waitForSelector('tr:has-text("Carla Mendes") >> text=Enfermeira'); });
 await step('coordenador: desativa Rafael', async () => {
   await tab('Funcionários'); const row = page.locator('tr', { hasText: 'Rafael Lima' }); await row.locator('[data-ativo]').click(); await page.waitForSelector('tr:has-text("Rafael Lima") >> text=Desativado');
 });
