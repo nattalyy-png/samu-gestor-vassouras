@@ -644,7 +644,17 @@ BIND.escalaGeral = () => {
 VIEWS.funcionarios = async () => {
   const eq = await equipe(); ui.equipe = eq;
   const perfis = me.perfil === 'admin' ? ['plantonista', 'coordenador', 'admin'] : ['plantonista', 'coordenador'];
+  const cadastrados = new Set(eq.map(u => normNome(u.nome)));
+  const semCad = rows(await getDocs(query(C('escala'), where('user', '==', null))));
+  const mapa = new Map();
+  semCad.forEach(e => { const k = e.nomeEscala || normNome(e.userNome); if (!cadastrados.has(k) && !mapa.has(k)) mapa.set(k, { nome: nomeBonito(e.userNome), cargo: e.cargo || '', n: 0 }); if (mapa.has(k)) mapa.get(k).n++; });
+  ui.pre = [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome));
   return `<h1>Funcionários</h1>
+  ${ui.pre.length ? `<div class="card"><h2>Pré-cadastro da escala (${ui.pre.length} pessoas)</h2>
+  <p class="small muted">Estas pessoas estão na escala mas ainda não têm acesso. Confira o cargo, digite o e-mail e clique em Cadastrar: a pessoa recebe o e-mail para criar a senha e os plantões dela já ficam ligados.</p>
+  <div class="tablewrap"><table><tr><th>Nome (como na escala)</th><th>Cargo</th><th>E-mail</th><th>Perfil</th><th></th></tr>
+  ${ui.pre.map((p, i) => `<tr><td><b>${esc(p.nome)}</b><br><span class="small muted">${p.n} plantão(ões)</span></td><td><input id="pf${i}" value="${esc(p.cargo)}" style="min-width:150px"></td><td><input id="pe${i}" type="email" placeholder="email@exemplo.com" style="min-width:200px"></td>
+  <td><select id="pp${i}" style="width:auto">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></td><td><button class="primary" data-pre="${i}">Cadastrar</button></td></tr>`).join('')}</table></div></div>` : ''}
   <div class="card"><h2>Cadastrar funcionário</h2><div class="grid2"><label>Nome<input id="fn"></label><label>E-mail<input id="fe" type="email"></label><label>Função<input id="ff" placeholder="Ex.: Técnico de enfermagem"></label>
   <label>Perfil<select id="fp">${perfis.map(p => `<option value="${p}">${perfilNome(p)}</option>`).join('')}</select></label></div>
   <button class="primary" id="fAdd">Cadastrar e enviar e-mail de senha</button>
@@ -656,28 +666,40 @@ VIEWS.funcionarios = async () => {
     <td class="row" style="flex-wrap:nowrap">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></td></tr>`; }).join('')}
   </table></div><p class="small muted">Desativar bloqueia o acesso imediatamente e mantém o histórico do funcionário.</p></div>`;
 };
+// Cria a conta, envia o e-mail de senha e liga os plantões da escala com o mesmo nome.
+async function cadastrarFuncionario(nome, email, funcao, perfil) {
+  const sec = initializeApp(firebaseConfig, 'cadastro-' + Date.now()); // instância separada para não desconectar quem cadastra
+  try {
+    const sauth = getAuth(sec);
+    if (EMU) connectAuthEmulator(sauth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    const senhaTemp = crypto.getRandomValues(new Uint32Array(4)).join('-') + 'Aa!';
+    const cred = await createUserWithEmailAndPassword(sauth, email, senhaTemp);
+    await signOut(sauth);
+    await setDoc(doc(db, 'users', cred.user.uid), { nome, email, funcao, perfil, ativo: true, criadoEm: serverTimestamp(), criadoPor: me.uid });
+    await sendPasswordResetEmail(auth, email);
+    const pend = rows(await getDocs(query(C('escala'), where('nomeEscala', '==', normNome(nome))))).filter(x => !x.user);
+    for (let i = 0; i < pend.length; i += 400) { const b = writeBatch(db); pend.slice(i, i + 400).forEach(x => b.update(doc(db, 'escala', x.id), { user: cred.user.uid, userNome: nome })); await b.commit(); }
+    registrarAcao(`Cadastrou ${nome} (${perfilNome(perfil)})${pend.length ? ` e ligou ${pend.length} plantão(ões) da escala` : ''}`);
+    return pend.length;
+  } finally { deleteApp(sec).catch(() => { }); }
+}
+const nomeBonito = t => String(t).toLowerCase().replace(/(^|\s)(\S)/g, (m, sp, c) => sp + c.toUpperCase()).replace(/ (Da|De|Do|Das|Dos|E) /g, m => m.toLowerCase());
 BIND.funcionarios = () => {
   $('fAdd').onclick = async () => {
     const nome = $('fn').value.trim(), email = $('fe').value.trim().toLowerCase(), funcao = $('ff').value.trim(), perfil = $('fp').value;
     if (!nome || !email) { alertaErro('Preencha nome e e-mail'); return; }
     const btn = $('fAdd'); btn.disabled = true; btn.textContent = 'Cadastrando…';
-    // Cria a conta numa instância separada para não desconectar quem está cadastrando.
-    const sec = initializeApp(firebaseConfig, 'cadastro-' + Date.now());
-    try {
-      const sauth = getAuth(sec);
-      if (EMU) connectAuthEmulator(sauth, 'http://127.0.0.1:9099', { disableWarnings: true });
-      const senhaTemp = crypto.getRandomValues(new Uint32Array(4)).join('-') + 'Aa!';
-      const cred = await createUserWithEmailAndPassword(sauth, email, senhaTemp);
-      await signOut(sauth);
-      await setDoc(doc(db, 'users', cred.user.uid), { nome, email, funcao, perfil, ativo: true, criadoEm: serverTimestamp(), criadoPor: me.uid });
-      await sendPasswordResetEmail(auth, email);
-      const pend = rows(await getDocs(query(C('escala'), where('nomeEscala', '==', normNome(nome))))).filter(x => !x.user);
-      for (let i = 0; i < pend.length; i += 400) { const b = writeBatch(db); pend.slice(i, i + 400).forEach(x => b.update(doc(db, 'escala', x.id), { user: cred.user.uid, userNome: nome })); await b.commit(); }
-      registrarAcao(`Cadastrou ${nome} (${perfilNome(perfil)})${pend.length ? ` e ligou ${pend.length} plantão(ões) da escala` : ''}`);
-      toast(`${nome} cadastrado(a). E-mail de senha enviado.`); render();
-    } catch (e) { alertaErro(msgErro(e)); btn.disabled = false; btn.textContent = 'Cadastrar e enviar e-mail de senha'; }
-    finally { deleteApp(sec).catch(() => { }); }
+    try { await cadastrarFuncionario(nome, email, funcao, perfil); toast(`${nome} cadastrado(a). E-mail de senha enviado.`); render(); }
+    catch (e) { alertaErro(msgErro(e)); btn.disabled = false; btn.textContent = 'Cadastrar e enviar e-mail de senha'; }
   };
+  document.querySelectorAll('[data-pre]').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.pre, p = ui.pre[i];
+    const email = $('pe' + i).value.trim().toLowerCase(), funcao = $('pf' + i).value.trim(), perfil = $('pp' + i).value;
+    if (!/^\S+@\S+\.\S+$/.test(email)) { alertaErro('Digite um e-mail válido para ' + p.nome); return; }
+    b.disabled = true; b.textContent = 'Cadastrando…';
+    try { const n = await cadastrarFuncionario(p.nome, email, funcao, perfil); toast(`${p.nome} cadastrado(a), ${n} plantão(ões) ligados. E-mail de senha enviado.`); render(); }
+    catch (e) { alertaErro(msgErro(e)); b.disabled = false; b.textContent = 'Cadastrar'; }
+  });
   document.querySelectorAll('[data-perfil]').forEach(s => s.onchange = async () => {
     const u = ui.equipe.find(x => x.id === s.dataset.perfil);
     try { await updateDoc(doc(db, 'users', u.id), { perfil: s.value }); registrarAcao(`Mudou perfil de ${u.nome} para ${perfilNome(s.value)}`); toast('Perfil atualizado'); } catch (e) { alertaErro(msgErro(e)); render(); }
