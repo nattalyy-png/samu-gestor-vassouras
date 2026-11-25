@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 18h00';
+const VERSAO = '25/11 18h10';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
