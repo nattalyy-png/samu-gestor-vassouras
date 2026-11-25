@@ -107,7 +107,7 @@ await step('coordenador: painel com pendências', async () => {
 await step('coordenador: negativa com ofício PDF', async () => {
   await tab('Solicitações e ofícios'); await page.click('#novaSol');
   await page.fill('#sp', 'J. S.'); await page.fill('#ss', 'Hospital Exemplo'); await page.fill('#sq', 'Consulta eletiva');
-  await page.click('#negar'); await page.check('[data-mot="m2"]'); await page.check('[data-mot="m3"]');
+  await page.click('#negar'); await page.click('[data-mot="m2"]'); await page.waitForSelector('[data-mot="m2"][aria-pressed="true"]'); await page.click('[data-mot="m3"]'); await page.waitForSelector('details.motdet >> nth=1');
   await shot('11-coord-oficio');
   const [d] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#salvarOf')]);
   await d.saveAs(`${SHOTS}/oficio.pdf`);

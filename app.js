@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 15h45';
+const VERSAO = '25/11 15h50';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -415,8 +415,10 @@ VIEWS.solicitacoes = async () => {
     <div class="grid2"><label>Paciente (iniciais)<input id="sp" value="${esc(s.paciente)}" placeholder="Ex.: J. S." maxlength="12"></label>
     <label>Setor / unidade solicitante<input id="ss" value="${esc(s.setor)}"></label></div>
     <label>Quadro clínico (resumo)<textarea id="sq">${esc(s.quadro)}</textarea></label>
-    <div class="row"><button class="primary" id="autorizar">Autorizar</button><button id="negar">Negar</button>${s.decisao ? `<span class="pill ${s.decisao === 'Negado' ? 'bad' : 'ok'}">${esc(s.decisao)}</span>` : ''}</div>
-    ${s.decisao === 'Negado' ? `<h3>Motivos da negativa</h3><div class="checks">${(CFG.motivos || []).map(m => `<label><input type="checkbox" data-mot="${esc(m.id)}" ${s.motivos.includes(m.id) ? 'checked' : ''}> <span>${esc(m.nome)}<br><span class="small muted">${esc((m.base || []).join(' · '))}</span></span></label>`).join('')}</div>` : ''}
+    <div class="chips"><button type="button" class="chip" id="autorizar" aria-pressed="${s.decisao === 'Autorizado'}">${s.decisao === 'Autorizado' ? '✓ ' : ''}Autorizar</button><button type="button" class="chip" id="negar" aria-pressed="${s.decisao === 'Negado'}">${s.decisao === 'Negado' ? '✓ ' : ''}Negar</button></div>
+    ${s.decisao === 'Negado' ? `<h3>Motivos da negativa</h3><p class="small muted">Toque nos motivos para marcar. Os marcados abrem embaixo com o texto e a base legal.</p>
+    <div class="chips">${(CFG.motivos || []).map(m => `<button type="button" class="chip" data-mot="${esc(m.id)}" aria-pressed="${s.motivos.includes(m.id)}">${s.motivos.includes(m.id) ? '✓ ' : ''}${esc(m.nome)}</button>`).join('')}</div>
+    ${(CFG.motivos || []).filter(m => s.motivos.includes(m.id)).map(m => `<details class="motdet" open><summary>${esc(m.nome)}</summary><p>“…considerando que ${esc(m.texto)}.”</p>${(m.base || []).length ? `<p class="small"><b>Base legal:</b> ${esc(m.base.join(' · '))}</p>` : ''}</details>`).join('')}` : ''}
     ${s.decisao ? `<h3>Texto do ofício (pode editar antes de salvar)</h3><textarea id="oftx" class="oficio" style="min-height:380px">${esc(s.texto || gerarOficio(s))}</textarea>
     <div class="row"><button class="primary" id="salvarOf">${s.id ? 'Salvar alterações' : 'Salvar e numerar ofício'}</button>${s.id ? '<button id="pdfOf">Baixar PDF</button>' : ''}<button class="ghost" id="regerar">Refazer texto</button></div>
     <p class="small muted">O app apenas sugere o texto. A decisão, a revisão e a assinatura são do coordenador.</p>` : ''}
@@ -446,7 +448,7 @@ BIND.solicitacoes = () => {
   $('autorizar').onclick = () => decidir('Autorizado');
   $('negar').onclick = () => decidir('Negado');
   $('fecharSol').onclick = () => { ui.sol = null; render(); };
-  document.querySelectorAll('[data-mot]').forEach(c => c.onchange = () => { sync(); const id = c.dataset.mot; ui.sol.motivos = c.checked ? [...ui.sol.motivos, id] : ui.sol.motivos.filter(x => x !== id); ui.sol.texto = null; render(); });
+  document.querySelectorAll('[data-mot]').forEach(c => c.onclick = () => { sync(); const id = c.dataset.mot, on = ui.sol.motivos.includes(id); ui.sol.motivos = on ? ui.sol.motivos.filter(x => x !== id) : [...ui.sol.motivos, id]; ui.sol.texto = null; const y = window.scrollY; render().then(() => window.scrollTo(0, y)); });
   if (!$('salvarOf')) return;
   $('oftx').oninput = e => ui.sol.texto = e.target.value;
   $('regerar').onclick = () => { sync(); ui.sol.texto = null; render(); };

@@ -158,3 +158,9 @@ nav.bottom svg{width:22px;height:22px}
 .modo.escuro option{color:#0F2741}
 .topo-gestao .modo{grid-auto-flow:column;align-items:center}
 .plant-top .modo{width:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:8px 16px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.motdet{border:1px solid var(--line);border-left:0;border-radius:12px;padding:10px 14px;background:var(--bg)}
+.motdet summary{font-weight:700;cursor:pointer}
+.motdet p{margin:6px 0 0}
