@@ -1,7 +1,7 @@
 // SAMU Gestor · Vassouras — versão real (Firebase)
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, connectFirestoreEmulator, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, serverTimestamp, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, connectFirestoreEmulator, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, serverTimestamp, writeBatch, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { lerEscalaPDF } from "./escala-parser.js";
 
@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 18h10';
+const VERSAO = '25/11 18h30';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -310,11 +310,35 @@ VIEWS.checklist = async () => {
     <div class="row"><button class="primary" id="ckEnviar">Enviar checklist</button><span class="small muted">${ui.ckItens.filter(i => i.s !== 'ok').length} item(ns) com pendência</span></div>
   </div>`;
 };
-BIND.painel = () => document.querySelectorAll('[data-and]').forEach(sel => sel.onchange = () => {
+BIND.painel = () => { bindEscalaHoje(); document.querySelectorAll('[data-and]').forEach(sel => sel.onchange = () => {
   const [id, k] = sel.dataset.and.split('|');
   const obs = sel.value === 'Pendente' ? '' : (prompt('Observação (opcional):') || '');
   gravar(updateDoc(doc(db, 'checklists', id), { ['andamento.' + k]: { st: sel.value, obs, por: me.nome, em: new Date().toISOString() } }), 'Andamento atualizado'); setTimeout(render, 700);
-});
+}); };
+function bindEscalaHoje() {
+  const sel = $('phS');
+  if (sel) sel.onchange = () => { const e = ui.escHoje.find(x => x.id === sel.value); if (e) { if (e.turno && [...$('phT').options].some(o => o.value === e.turno)) $('phT').value = e.turno; else if (e.turno) $('phT').add(new Option(e.turno, e.turno, true, true)); if (e.viatura) $('phV').value = e.viatura; } };
+  const bt = $('phAdd');
+  if (bt) bt.onclick = async () => {
+    const u = ui.eqPainel.find(x => x.id === $('phU').value); if (!u) { alertaErro('Escolha quem vai entrar na escala.'); return; }
+    const hoje = diaStr(); const sub = ui.escHoje.find(x => x.id === sel.value);
+    if (ui.escHoje.some(e => e.user === u.id && !e.substituidoPor && e.turno === $('phT').value)) { alertaErro(`${u.nome} já está na escala de hoje neste turno.`); return; }
+    if (sub && sub.user === u.id) { alertaErro('Escolha outra pessoa para entrar no lugar.'); return; }
+    const novo = doc(C('escala'));
+    const b = writeBatch(db);
+    b.set(novo, { user: u.id, userNome: u.nome, nomeEscala: normNome(u.nome), cargo: u.funcao || '', data: hoje, mes: hoje.slice(0, 7), turno: $('phT').value, codigo: '', viatura: $('phV').value || (sub && sub.viatura) || '', origem: sub ? 'substituicao' : 'avulso', substitui: sub ? sub.userNome : '', substituiId: sub ? sub.id : '', criadoPor: me.uid, criadoEm: serverTimestamp() });
+    if (sub) b.update(doc(db, 'escala', sub.id), { substituidoPor: u.nome, substituidoEm: serverTimestamp() });
+    bt.disabled = true;
+    try { await b.commit(); registrarAcao(sub ? `Escala de hoje: ${u.nome} no lugar de ${sub.userNome}` : `Escala de hoje: incluiu ${u.nome}`); toast('Incluído na escala de hoje'); render(); } catch (e) { bt.disabled = false; alertaErro(msgErro(e)); }
+  };
+  document.querySelectorAll('[data-tirar]').forEach(x => x.onclick = async () => {
+    const e = ui.escHoje.find(i => i.id === x.dataset.tirar); if (!e) return;
+    if (!confirm(`Tirar ${e.userNome} da escala de hoje?${e.substitui ? ` ${e.substitui} volta a aparecer na escala.` : ''}`)) return;
+    const b = writeBatch(db); b.delete(doc(db, 'escala', e.id));
+    if (e.substituiId && ui.escHoje.some(i => i.id === e.substituiId)) b.update(doc(db, 'escala', e.substituiId), { substituidoPor: deleteField(), substituidoEm: deleteField() });
+    try { await b.commit(); registrarAcao(`Escala de hoje: tirou ${e.userNome}`); toast('Removido da escala de hoje'); render(); } catch (err) { alertaErro(msgErro(err)); }
+  });
+}
 BIND.checklist = () => {
   document.querySelectorAll('[data-tipo]').forEach(b => b.onclick = () => { ui.ckTipo = b.dataset.tipo; ui.ckViatura = null; ui.ckItens = null; render(); });
   $('ckv').onchange = e => ui.ckViatura = e.target.value;
@@ -367,15 +391,18 @@ BIND.inter = () => $('iEnviar').onclick = () => {
 };
 
 async function equipeDoDia(dia) { return rows(await getDocs(query(C('escala'), where('data', '==', dia)))).sort((a, b) => (a.turno || '').localeCompare(b.turno || '') || (a.cargo || '').localeCompare(b.cargo || '') || a.userNome.localeCompare(b.userNome)); }
+function selosEscala(e) {
+  return `${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}${e.origem === 'substituicao' ? ` <span class="pill ok">no lugar de ${esc(e.substitui || '')}</span>` : ''}${e.origem === 'avulso' ? ' <span class="pill ok">incluído no dia</span>' : ''}${e.substituidoPor ? ` <span class="pill neutral">substituído por ${esc(e.substituidoPor)}</span>` : ''}`;
+}
 function listaEquipe(lista) {
   if (!lista.length) return '<p class="empty">Ninguém lançado na escala neste dia.</p>';
   const grupos = {}; lista.forEach(e => (grupos[e.turno || 'Plantão'] ||= []).push(e));
-  return Object.entries(grupos).map(([t, es]) => `<h3 style="margin-top:8px">${esc(t)}</h3>${es.map(e => `<div class="viat"><span>${esc(e.userNome)}${me && e.user === me.uid ? ' <b>(você)</b>' : ''}<br><span class="small muted">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}</span></span><span>${e.codigo ? `<span class="pill neutral">${esc(e.codigo)}</span>` : ''}${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</span></div>`).join('')}`).join('');
+  return Object.entries(grupos).map(([t, es]) => `<h3 style="margin-top:8px">${esc(t)}</h3>${es.map(e => `<div class="viat"><span>${esc(e.userNome)}${me && e.user === me.uid ? ' <b>(você)</b>' : ''}<br><span class="small muted">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}</span></span><span>${e.codigo ? `<span class="pill neutral">${esc(e.codigo)}</span>` : ''}${selosEscala(e)}</span></div>`).join('')}`).join('');
 }
-function listaEquipeHoje(lista) {
+function listaEquipeHoje(lista, gestao) {
   if (!lista.length) return '<p class="empty">Ninguém lançado na escala hoje.</p>';
   const grupos = {}; lista.forEach(e => (grupos[e.turno || 'Plantão'] ||= []).push(e));
-  return Object.entries(grupos).map(([t, es]) => `<div class="esc-turno"><h3>${esc(t)} <span class="muted">(${es.length})</span></h3><div class="esc-grade">${es.sort((a, b) => (a.viatura || '').localeCompare(b.viatura || '') || (a.userNome || '').localeCompare(b.userNome || '')).map(e => `<div class="esc-pessoa"><div class="esc-nome">${esc(e.userNome)}</div><div class="esc-info">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}${e.codigo ? ' · ' + esc(e.codigo) : ''}${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</div></div>`).join('')}</div></div>`).join('');
+  return Object.entries(grupos).map(([t, es]) => `<div class="esc-turno"><h3>${esc(t)} <span class="muted">(${es.filter(e => !e.substituidoPor).length})</span></h3><div class="esc-grade">${es.sort((a, b) => (a.viatura || '').localeCompare(b.viatura || '') || (a.userNome || '').localeCompare(b.userNome || '')).map(e => `<div class="esc-pessoa${e.substituidoPor ? ' fora' : ''}"><div class="esc-nome">${esc(e.userNome)}${gestao && (e.origem === 'substituicao' || e.origem === 'avulso') ? `<button class="esc-tirar" data-tirar="${e.id}" aria-label="Tirar ${esc(e.userNome)} da escala de hoje" title="Desfazer">×</button>` : ''}</div><div class="esc-info">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}${e.codigo ? ' · ' + esc(e.codigo) : ''}${selosEscala(e)}</div></div>`).join('')}</div></div>`).join('');
 }
 async function mostrarEquipe(dia, alvo) {
   alvo.innerHTML = '<p class="muted">Carregando…</p>';
@@ -387,7 +414,7 @@ function calendario(mes, plantoes, pedidos = []) {
   const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate(), hoje = diaStr();
   const cells = []; for (let i = 0; i < first; i++) cells.push('<td></td>');
   for (let d = 1; d <= days; d++) {
-    const ds = `${mes}-${pad(d)}`; const es = plantoes.filter(x => x.data === ds);
+    const ds = `${mes}-${pad(d)}`; const es = plantoes.filter(x => x.data === ds && !x.substituidoPor);
     cells.push(`<td data-dia="${ds}" class="${es.length ? 'tem' : ''}" style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}${pedidos.filter(p => p.data === ds && p.status === 'pendente').map(p => `<br><span class="pill bad">⏳ ${p.tipo === 'troca' ? 'Troca' : 'Extra'}</span>`).join('')}</td>`);
   }
   const r = []; for (let i = 0; i < cells.length; i += 7) r.push('<tr>' + cells.slice(i, i + 7).join('') + '</tr>');
@@ -454,7 +481,9 @@ BIND.sugestoes = () => {
 /* ================= COORDENAÇÃO ================= */
 VIEWS.painel = async () => {
   const hoje = diaStr();
-  const [cks, mts, inters, escHoje] = await Promise.all([doDia('checklists', hoje), doDia('materiais', hoje), doMes('intercorrencias', mesStr()), equipeDoDia(hoje).catch(() => [])]);
+  const [cks, mts, inters, escHoje, eqP] = await Promise.all([doDia('checklists', hoje), doDia('materiais', hoje), doMes('intercorrencias', mesStr()), equipeDoDia(hoje).catch(() => []), equipe().catch(() => [])]);
+  ui.escHoje = escHoje; ui.eqPainel = eqP.filter(u => u.ativo && u.perfil !== 'admin');
+  const noDia = escHoje.filter(e => !e.substituidoPor);
   const vs = viaturas();
   const pendTodas = cks.flatMap(c => (c.itens || []).map((i, k) => ({ ...i, k, c, a: (c.andamento || {})[k] })).filter(i => i.s !== 'ok'));
   const pend = pendTodas.filter(p => !p.a || p.a.st !== 'Resolvido');
@@ -476,7 +505,17 @@ VIEWS.painel = async () => {
     <div class="stat"><span>Itens pendentes</span><b style="color:${pend.length ? 'var(--bad)' : 'var(--ok)'}">${pend.length}</b></div>
     <div class="stat"><span>Material abaixo do mínimo</span><b style="color:${baixos.length ? 'var(--bad)' : 'var(--ok)'}">${baixos.length}</b></div>
     <div class="stat"><span>Intercorrências hoje</span><b>${interH.length}</b></div></div>
-  <div class="card esc-hoje"><h2>Escala de hoje (${escHoje.length})</h2>${listaEquipeHoje(escHoje)}</div>
+  <div class="card esc-hoje"><h2>Escala de hoje (${noDia.length})</h2>${listaEquipeHoje(escHoje, true)}
+    <details class="esc-add"><summary>+ Incluir alguém só hoje</summary>
+      <p class="small muted">Para cobrir uma ausência (licença, atestado, falta) ou reforçar a equipe. Vale só para hoje e não mexe no resto da escala. Não anote o motivo da ausência aqui.</p>
+      <div class="grid2">
+        <label>Quem vai entrar<select id="phU"><option value="">Escolha…</option>${ui.eqPainel.map(u => `<option value="${u.id}">${esc(u.nome)}${u.funcao ? ' · ' + esc(u.funcao) : ''}</option>`).join('')}</select></label>
+        <label>No lugar de<select id="phS"><option value="">Ninguém (reforço)</option>${noDia.filter(e => e.origem !== 'substituicao' && e.origem !== 'avulso').map(e => `<option value="${e.id}">${esc(e.userNome)} · ${esc(e.turno || '')}</option>`).join('')}</select></label>
+        <label>Turno<select id="phT">${(CFG.turnos || []).concat(['Plantão 24h (diurno/noturno)']).map(t => `<option>${esc(t)}</option>`).join('')}</select></label>
+        <label>Viatura (opcional)<select id="phV"><option value="">—</option>${viaturas().map(v => `<option>${esc(v.id)}</option>`).join('')}</select></label>
+      </div>
+      <button class="primary" id="phAdd">Incluir na escala de hoje</button>
+    </details></div>
   <div class="grid2">
     <div class="card"><h2>Situação das viaturas</h2>${vs.map(v => { const s = statusV(v); return `<div class="viat"><div><b>${esc(v.id)}</b><br><span class="small muted">${s.ck ? 'Último checklist: ' + fmt(s.ck.quando) + ' · ' + esc(s.ck.userNome) : 'Sem checklist hoje'}</span></div>${s.pill}</div>`; }).join('')}</div>
     <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span>${p.a ? `<br><span class="small muted">${esc(p.a.st)}${p.a.obs ? ': ' + esc(p.a.obs) : ''} · ${esc(p.a.por)}</span>` : ''}</div><div style="display:grid;gap:4px;justify-items:end"><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${SITU[p.s] || p.s}</span><select data-and="${p.c.id}|${p.k}" aria-label="Andamento">${['Pendente', 'Em andamento', 'Resolvido'].map(o => `<option ${(p.a?.st || 'Pendente') === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}${resolvidas ? `<p class="small muted">${resolvidas} resolvida(s) hoje (aparecem no relatório).</p>` : ''}</div></div>
@@ -696,7 +735,7 @@ VIEWS.escalaGeral = async () => {
     <input type="file" id="eArq"><p id="eArqInfo" class="small"></p></div>
   <div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)} (${lista.length} plantões)</h2><button id="mProx">Próximo ›</button></div>
   ${semCad.length ? `<p class="small"><span class="pill bad">⚠ ${semCad.length} nome(s) da escala sem cadastro</span> ${esc(semCad.join(', '))}. Cadastre em Funcionários com o nome completo igual ao da escala.</p>` : ''}
-  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}${e.trocaDe ? ` <span class="pill warn">troca com ${esc(e.trocaDe)}</span>` : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
+  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}${e.trocaDe ? ` <span class="pill warn">troca com ${esc(e.trocaDe)}</span>` : ''}${selosEscala({ ...e, trocaDe: '' })}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
 };
 BIND.escalaGeral = () => {
   $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); };

@@ -215,3 +215,18 @@ nav.bottom.so-celular{display:none}
   .seg button[data-s="huv"],.seg button[data-s="humc"]{grid-column:span 3;border-top:1px solid var(--line)}
   .seg button[data-s="humc"]{border-right:0}
 }
+
+/* Escala de hoje: incluir alguém só no dia */
+.esc-pessoa.fora{opacity:.55}
+.esc-pessoa.fora .esc-nome{text-decoration:line-through}
+.esc-nome{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.esc-tirar{border:0;background:transparent;color:var(--muted);padding:0 4px;min-height:0;font-size:1.1rem;line-height:1;cursor:pointer}
+.esc-tirar:hover{color:var(--bad)}
+.esc-info{display:flex;flex-wrap:wrap;gap:3px 4px;align-items:center}
+details.esc-add{border-top:1px solid #d6e0ec;padding-top:10px}
+details.esc-add summary{cursor:pointer;font-weight:700;color:var(--accent);font-size:.9rem;list-style:none}
+details.esc-add summary::-webkit-details-marker{display:none}
+details.esc-add[open]{display:grid;gap:10px}
+details.esc-add .grid2{gap:10px}
+details.esc-add select{background:#fff}
+.esc-info .pill{white-space:normal;max-width:100%}
