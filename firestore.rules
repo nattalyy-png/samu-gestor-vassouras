@@ -2,8 +2,7 @@ rules_version = '2';
 
 // Regras de segurança do SAMU Gestor.
 // Perfis: plantonista (vê só o que é seu), coordenador (vê tudo, inclusive
-// solicitações com dados de pacientes), admin (cadastros, configurações e
-// cópia de segurança; NÃO vê solicitações de pacientes, conforme a LGPD).
+// solicitações com iniciais de pacientes) e admin (vê e corrige tudo).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -51,7 +50,7 @@ service cloud.firestore {
       allow write: if isGestao() || (signedIn() && !exists(setupPath()) && existsAfter(setupPath()));
     }
     match /config/contador {
-      allow read, write: if isCoordenador();
+      allow read, write: if isGestao();
     }
 
     match /users/{uid} {
@@ -89,10 +88,10 @@ service cloud.firestore {
       allow read: if isGestao() || dono();
       allow write: if isGestao();
     }
-    // Dados de pacientes: somente o coordenador.
+    // Dados de pacientes (só iniciais): coordenador e admin.
     match /solicitacoes/{id} {
-      allow read, create, update: if isCoordenador();
-      allow delete: if false;
+      allow read, create, update: if isGestao();
+      allow delete: if isAdmin();
     }
     match /log/{id} {
       allow read: if isGestao();

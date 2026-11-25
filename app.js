@@ -15,6 +15,7 @@ const fmtDia = s => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; }
 const fmtMes = s => { const [y, m] = s.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); };
 const addMes = (s, n) => { const [y, m] = s.split('-').map(Number); return mesStr(new Date(y, m - 1 + n, 1)); };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const normNome = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
 const linhas = t => String(t || '').split('\n').map(s => s.trim()).filter(Boolean);
 const $ = id => document.getElementById(id);
 const toast = msg => { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); };
@@ -84,9 +85,17 @@ const perfilNome = p => ({ plantonista: 'Plantonista', coordenador: 'Coordenador
 const TABS = {
   plantonista: [['inicio', 'Início'], ['checklist', 'Checklist'], ['material', 'Material'], ['inter', 'Intercorrências'], ['escala', 'Minha escala'], ['sugestoes', 'Sugestões']],
   coordenador: [['painel', 'Painel'], ['solicitacoes', 'Solicitações e ofícios'], ['relatorios', 'Relatórios'], ['escalaGeral', 'Escala'], ['funcionarios', 'Funcionários'], ['config', 'Listas e ofícios'], ['sugestoes', 'Sugestões']],
-  admin: [['painel', 'Painel'], ['relatorios', 'Relatórios'], ['funcionarios', 'Funcionários'], ['config', 'Listas e ofícios'], ['backup', 'Cópia de segurança'], ['atividade', 'Registro de ações'], ['sugestoes', 'Sugestões']]
+  admin: [['painel', 'Painel'], ['solicitacoes', 'Solicitações e ofícios'], ['relatorios', 'Relatórios'], ['escalaGeral', 'Escala'], ['funcionarios', 'Funcionários'], ['config', 'Listas e ofícios'], ['backup', 'Cópia de segurança'], ['atividade', 'Registro de ações'], ['sugestoes', 'Sugestões']]
 };
-const gestao = () => me && (me.perfil === 'coordenador' || me.perfil === 'admin');
+// A administração pode ver o app como gestor ou como plantonista (modo de visualização).
+let modo = null; try { modo = localStorage.getItem('samu-modo'); } catch (e) { }
+const vis = () => (me && me.perfil === 'admin' && ['coordenador', 'plantonista'].includes(modo)) ? modo : me?.perfil;
+const gestao = () => me && (vis() === 'coordenador' || vis() === 'admin');
+function seletorModo(escuro) {
+  if (me.perfil !== 'admin') return '';
+  const op = [['admin', 'Administração'], ['coordenador', 'Gestor'], ['plantonista', 'Plantonista']];
+  return `<label class="modo ${escuro ? 'escuro' : ''}">Ver como<select id="modoSel">${op.map(([v, l]) => `<option value="${v}" ${vis() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+}
 
 function base(extra) { return { user: me.uid, userNome: me.nome, quando: serverTimestamp(), dia: diaStr(), mes: mesStr(), ...extra }; }
 function registrarAcao(acao) { addDoc(C('log'), { user: me.uid, userNome: me.nome, acao, quando: serverTimestamp() }).catch(() => {}); }
@@ -111,7 +120,7 @@ onAuthStateChanged(auth, async user => {
   }
   me = { uid: user.uid, ...perfil };
   try { const c = await getDoc(doc(db, 'config', 'listas')); if (c.exists()) CFG = { ...PADRAO, ...c.data() }; } catch (e) { }
-  tab = TABS[me.perfil][0][0];
+  tab = TABS[vis()][0][0];
   render();
 });
 
@@ -119,8 +128,9 @@ onAuthStateChanged(auth, async user => {
 async function renderLogin() {
   let primeiro = false;
   try { primeiro = !(await getDoc(doc(db, 'config', 'setup'))).exists(); } catch (e) { }
-  app.innerHTML = `<div class="wrap login"><div class="card logincard">
-    <div class="logobox"><img src="logo-completa.png" alt="SAMU Gestor" width="200"></div>
+  app.innerHTML = `<div class="login2">
+    <div class="hero"><div class="logo"><img src="logo-completa.png" alt=""></div><div><b>SAMU Vassouras</b><span>Gestão do plantão</span></div></div>
+    <div class="corpo">
     <h1>Entrar</h1>
     <form id="flogin" class="card" style="border:0;padding:0">
       <label>E-mail<input id="lemail" type="email" autocomplete="username" required></label>
@@ -139,6 +149,7 @@ async function renderLogin() {
       <p id="serro" class="err small" hidden></p>
       <button class="primary" type="submit">Criar conta da administração</button>
     </form>` : ''}
+    <p class="rodape">Cada funcionário tem seu próprio acesso.<br>O coordenador entra pelo mesmo login e vê o painel completo.</p>
   </div></div>`;
   $('flogin').onsubmit = async e => {
     e.preventDefault(); $('lerro').hidden = true;
@@ -170,14 +181,28 @@ async function renderLogin() {
 let renderSeq = 0;
 async function render() {
   const seq = ++renderSeq;
-  const tabs = TABS[me.perfil];
-  app.innerHTML = `${CFG.exemplo && gestao() ? `<div class="banner"><div class="wrap">As listas de checklist, materiais e motivos de negativa ainda são EXEMPLOS. Troque pelas reais em "Listas e ofícios".</div></div>` : ''}
-  <header class="top"><div class="wrap"><div class="topbar">
-    <div class="brand"><img class="logo-mini" src="logo-simbolo.png" alt="" width="36" height="36">SAMU Gestor<span class="small muted" style="font-weight:500;font-family:var(--body)">&nbsp;Vassouras</span></div>
-    <div class="who"><span>${esc(me.nome)} · ${esc(perfilNome(me.perfil))}</span><button class="ghost" id="sair">Sair</button></div>
-  </div><nav class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}</nav></div></header>
-  <main class="wrap" id="main"><div class="spinner">Carregando…</div></main>`;
+  const tabs = TABS[vis()];
+  const aviso = CFG.exemplo && gestao() ? `<div class="banner"><div class="wrap">As listas de checklist, materiais e motivos de negativa ainda são EXEMPLOS. Troque pelas reais em "Listas e ofícios".</div></div>` : '';
+  const iniciais = me.nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((c, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
+  if (gestao()) {
+    app.innerHTML = `<div class="shell">
+    <aside class="side"><div class="marca"><img src="logo-simbolo.png" alt=""><div><b>SAMU Vassouras</b><small>${esc(perfilNome(me.perfil))}</small></div></div>
+      ${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}
+      <div class="quem"><span>${esc(me.nome)}</span>${seletorModo(true)}<button id="sair">Sair</button></div></aside>
+    <div style="flex:1;min-width:0"><div class="topo-gestao"><div class="linha"><img src="logo-simbolo.png" alt=""><b>SAMU Vassouras</b>${seletorModo(true).replace('id="modoSel"', 'id="modoSel2"')}<button id="sair2">Sair</button></div>
+      <nav>${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}</nav></div>
+    ${aviso}<main id="main"><div class="spinner">Carregando…</div></main></div></div>`;
+  } else {
+    const IC = { inicio: '<path d="M3 10.5 12 3l9 7.5V21H3z"/>', checklist: '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>', material: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/>', inter: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>', escala: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', sugestoes: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>' };
+    const curto = { inicio: 'Início', checklist: 'Checklist', material: 'Material', inter: 'Ocorrência', escala: 'Escala', sugestoes: 'Ideias' };
+    app.innerHTML = `<div class="plant-top"><div class="in"><div class="avatar">${esc(iniciais)}</div><div class="ola"><small>Bom plantão,</small><b>${esc(me.nome.split(' ')[0])}</b></div>${seletorModo(true)}<button id="sair">Sair</button></div></div>
+    ${me.perfil === 'admin' ? '<div class="banner"><div class="wrap">Você está vendo o app como plantonista. O que enviar aqui fica registrado no seu nome.</div></div>' : ''}
+    <main class="plant-main" id="main"><div class="card"><div class="spinner">Carregando…</div></div></main>
+    <nav class="bottom">${tabs.map(([k]) => `<button data-tab="${k}" aria-current="${k === tab}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>${curto[k] || k}</button>`).join('')}</nav>`;
+  }
   app.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
+  if ($('sair2')) $('sair2').onclick = () => signOut(auth);
+  ['modoSel', 'modoSel2'].forEach(id => { if ($(id)) $(id).onchange = e => { modo = e.target.value; try { localStorage.setItem('samu-modo', modo); } catch (er) { } tab = TABS[vis()][0][0]; ui = {}; render(); window.scrollTo(0, 0); }; });
   $('sair').onclick = () => signOut(auth);
   const main = $('main');
   try {
@@ -208,15 +233,23 @@ VIEWS.inicio = async () => {
   const [esc1, esc2, cks] = await Promise.all([meus('escala'), meus('escala', addMes(mesStr(), 1)), meus('checklists')]);
   const escala = [...esc1, ...esc2].sort((a, b) => a.data.localeCompare(b.data));
   const p = escala.find(e => e.data === hoje);
-  const prox = escala.filter(e => e.data >= hoje).slice(0, 5);
+  const prox = escala.filter(e => e.data > hoje).slice(0, 5);
   const enviado = cks.some(c => c.dia === hoje);
-  return `<h1>Olá, ${esc(me.nome.split(' ')[0])}</h1>
-  <div class="card"><h2>Plantão de hoje</h2>${p ? `<p><b>${esc(p.turno)}</b> na viatura <b>${esc(p.viatura)}</b></p>` : '<p class="muted">Você não tem plantão hoje na escala.</p>'}
-    ${enviado ? '<p><span class="pill ok">Checklist de hoje enviado</span></p>' : (p ? '<p><span class="pill bad">⚠ Você ainda não enviou o checklist de hoje</span></p>' : '')}
-    <div class="row"><button class="primary" data-go="checklist">Fazer checklist</button><button data-go="material">Contar material</button><button data-go="inter">Registrar intercorrência</button></div></div>
-  <div class="card"><h2>Próximos plantões</h2>${prox.length ? `<div class="tablewrap"><table><tr><th>Data</th><th>Turno</th><th>Viatura</th></tr>${prox.map(e => `<tr><td>${fmtDia(e.data)}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td></tr>`).join('')}</table></div>` : '<p class="empty">Nenhum plantão lançado na escala.</p>'}</div>`;
+  const tile = (go, tag, bg, fg, t, sub) => `<button class="tile" data-go="${go}"><span class="ic" style="background:${bg};color:${fg}">${tag}</span><span><b>${t}</b><small>${sub}</small></span></button>`;
+  return `<div class="card"><div class="rotulo">Plantão de hoje</div>
+    ${p ? `<div><b style="font-size:1.15rem">${esc(p.codigo ? p.codigo + ' · ' : '')}${esc(p.turno)}</b>${p.viatura ? `<div class="muted small">Viatura ${esc(p.viatura)}</div>` : ''}</div>` : '<p class="muted">Você não tem plantão hoje na escala.</p>'}
+    ${enviado ? '<div class="aviso ok">✓ Checklist de hoje enviado</div>' : (p ? '<div class="aviso">⚠ Checklist da viatura ainda não enviado</div>' : '')}</div>
+  <div class="tiles">
+    ${tile('checklist', 'USB', '#FDECEC', '#B91C1C', 'Checklist USB', 'Suporte básico')}
+    ${tile('checklist', 'USA', '#FDECEC', '#B91C1C', 'Checklist USA', 'Suporte avançado')}
+    ${tile('material', 'MAT', '#E8F1FB', '#1D4E89', 'Contagem de material', 'Estoque da viatura')}
+    ${tile('inter', '!', '#FFF4E5', '#92400E', 'Intercorrência', 'Registrar ocorrência')}
+    ${tile('escala', 'ESC', '#E7F5EE', '#166534', 'Minha escala', 'Próximos plantões')}
+    ${tile('sugestoes', 'IDEIA', '#F1ECFB', '#5B3A9E', 'Sugestões', 'Ideias para o app')}
+  </div>
+  <div class="card"><h2>Próximos plantões</h2>${prox.length ? `<div class="tablewrap"><table><tr><th>Data</th><th>Plantão</th></tr>${prox.map(e => `<tr><td>${fmtDia(e.data)}</td><td>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.turno)}${e.viatura ? ' · ' + esc(e.viatura) : ''}</td></tr>`).join('')}</table></div>` : '<p class="empty">Nenhum plantão lançado na escala.</p>'}</div>`;
 };
-BIND.inicio = () => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+BIND.inicio = () => document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const t = b.querySelector('.ic')?.textContent; if (t === 'USB' || t === 'USA') { ui.ckTipo = t; ui.ckViatura = null; ui.ckItens = null; } go(b.dataset.go); });
 
 VIEWS.checklist = async () => {
   const vs = viaturas();
@@ -297,7 +330,7 @@ function calendario(mes, plantoes) {
   const cells = []; for (let i = 0; i < first; i++) cells.push('<td></td>');
   for (let d = 1; d <= days; d++) {
     const ds = `${mes}-${pad(d)}`; const es = plantoes.filter(x => x.data === ds);
-    cells.push(`<td style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}">${esc(e.turno.split(' ')[0])} ${esc(e.viatura)}</span>`).join('')}</td>`);
+    cells.push(`<td style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}</td>`);
   }
   const r = []; for (let i = 0; i < cells.length; i += 7) r.push('<tr>' + cells.slice(i, i + 7).join('') + '</tr>');
   return `<div class="tablewrap"><table class="cal"><tr>${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(x => `<th>${x}</th>`).join('')}</tr>${r.join('')}</table></div>`;
@@ -486,29 +519,57 @@ VIEWS.relatorios = async () => {
   const q = col => getDocs(query(C(col), where(campo, '==', valor))).then(rows);
   const [ck, mt, it] = await Promise.all([q('checklists'), q('materiais'), q('intercorrencias')]);
   let so = [];
-  if (me.perfil === 'coordenador') so = await q('solicitacoes');
+  so = await q('solicitacoes');
   const tab_ = [
     ...ck.map(c => [c.quando, 'Checklist', c.viatura, c.userNome, pendencias(c).length ? pendencias(c).map(p => `${p.s === 'falta' ? 'FALTA' : 'Problema'}: ${p.n}${p.o ? ' (' + p.o + ')' : ''}`).join('; ') : 'Tudo OK']),
     ...mt.map(m => { const b = abaixoMin(m); return [m.quando, 'Contagem de material', m.viatura, m.userNome, `${m.momento} do plantão` + (b.length ? ' · abaixo do mínimo: ' + b.map(x => `${x.n} (${x.q}/${x.min})`).join(', ') : '')]; }),
     ...it.map(i => [i.quando, 'Intercorrência', i.viatura, i.userNome, `${i.tipo} · ${i.gravidade}: ${i.texto}`]),
     ...so.map(s => [s.quando, 'Ofício', s.numero, s.criadoPorNome || 'Coordenação', s.decisao + (s.motivosNomes?.length ? ': ' + s.motivosNomes.join(', ') : '') + ' · ' + s.setor])
-  ].sort((a, b) => (toDate(b[0]) || 0) - (toDate(a[0]) || 0));
-  const resumo = `Checklists: ${ck.length} · Contagens: ${mt.length} · Intercorrências: ${it.length}${me.perfil === 'coordenador' ? ` · Autorizadas: ${so.filter(s => s.decisao === 'Autorizado').length} · Negadas: ${so.filter(s => s.decisao === 'Negado').length}` : ''}`;
+  ];
+  // guarda coleção e id para a administração poder corrigir
+  [[ck, 'checklists'], [mt, 'materiais'], [it, 'intercorrencias'], [so, 'solicitacoes']].reduce((i, [arr, col]) => { arr.forEach((r, k) => { tab_[i + k].push(col, r.id); }); return i + arr.length; }, 0);
+  tab_.sort((a, b) => (toDate(b[0]) || 0) - (toDate(a[0]) || 0));
+  const resumo = `Checklists: ${ck.length} · Contagens: ${mt.length} · Intercorrências: ${it.length}${true ? ` · Autorizadas: ${so.filter(s => s.decisao === 'Autorizado').length} · Negadas: ${so.filter(s => s.decisao === 'Negado').length}` : ''}`;
+  ui.relDados = Object.fromEntries([...ck.map(x => ['checklists/' + x.id, x]), ...mt.map(x => ['materiais/' + x.id, x]), ...it.map(x => ['intercorrencias/' + x.id, x])]);
   ui.relPdf = () => pdfRelatorio(r.modo === 'dia' ? 'Relatório diário · SAMU Vassouras' : 'Relatório mensal · SAMU Vassouras', r.modo === 'dia' ? fmtDia(r.dia) : fmtMes(r.mes), resumo, tab_.map(l => [fmt(l[0]), l[1], l[2], l[3], l[4]]));
   return `<div class="row" style="justify-content:space-between"><h1>Relatórios</h1>
     <div class="row"><div class="subtabs"><button id="rDia" ${r.modo === 'dia' ? 'class="primary"' : ''}>Dia</button><button id="rMes" ${r.modo === 'mes' ? 'class="primary"' : ''}>Mês</button></div>
     ${r.modo === 'dia' ? `<input type="date" id="rData" value="${r.dia}" style="width:auto">` : `<input type="month" id="rData" value="${r.mes}" style="width:auto">`}
     <button class="primary" id="rPdf">Baixar PDF</button></div></div>
   <div class="stats"><div class="stat"><span>Checklists</span><b>${ck.length}</b></div><div class="stat"><span>Contagens</span><b>${mt.length}</b></div><div class="stat"><span>Intercorrências</span><b>${it.length}</b></div>
-  ${me.perfil === 'coordenador' ? `<div class="stat"><span>Autorizadas / negadas</span><b>${so.filter(s => s.decisao === 'Autorizado').length} / ${so.filter(s => s.decisao === 'Negado').length}</b></div>` : ''}</div>
-  <div class="card"><h2>O que foi feito, quando e por quem</h2><div class="tablewrap"><table><tr><th>Data e hora</th><th>Registro</th><th>Viatura / nº</th><th>Autor</th><th>Resumo</th></tr>${tab_.map(l => `<tr><td class="num">${fmt(l[0])}</td><td>${esc(l[1])}</td><td>${esc(l[2])}</td><td>${esc(l[3])}</td><td>${esc(l[4])}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada registrado neste período.</td></tr>'}</table></div></div>`;
+  ${true ? `<div class="stat"><span>Autorizadas / negadas</span><b>${so.filter(s => s.decisao === 'Autorizado').length} / ${so.filter(s => s.decisao === 'Negado').length}</b></div>` : ''}</div>
+  <div class="card"><h2>O que foi feito, quando e por quem</h2><div class="tablewrap"><table><tr><th>Data e hora</th><th>Registro</th><th>Viatura / nº</th><th>Autor</th><th>Resumo</th>${me.perfil === 'admin' ? '<th></th>' : ''}</tr>${tab_.map(l => `<tr><td class="num">${fmt(l[0])}</td><td>${esc(l[1])}</td><td>${esc(l[2])}</td><td>${esc(l[3])}</td><td>${esc(l[4])}${l[7] ? `<br><span class="small muted">${esc(l[7])}</span>` : ''}</td>${me.perfil === 'admin' ? `<td class="noprint">${l[5] === 'solicitacoes' ? '' : `<button class="ghost" data-corr="${l[5]}/${l[6]}">Corrigir</button>`}</td>` : ''}</tr>`).join('') || '<tr><td colspan="6" class="empty">Nada registrado neste período.</td></tr>'}</table></div>
+  ${me.perfil === 'admin' ? '<p class="small muted">Administração: "Corrigir" permite ajustar o texto ou apagar um registro errado. Toda correção fica no Registro de ações. Ofícios se corrigem na aba Solicitações.</p>' : ''}</div>`;
 };
 BIND.relatorios = () => {
   $('rDia').onclick = () => { ui.rel.modo = 'dia'; render(); };
   $('rMes').onclick = () => { ui.rel.modo = 'mes'; render(); };
   $('rData').onchange = e => { if (!e.target.value) return; ui.rel[ui.rel.modo] = e.target.value; render(); };
   $('rPdf').onclick = () => ui.relPdf();
+  document.querySelectorAll('[data-corr]').forEach(b => b.onclick = () => abrirCorrecao(b.dataset.corr, b.closest('tr')));
 };
+function abrirCorrecao(chave, tr) {
+  const r = ui.relDados[chave]; if (!r) return;
+  const [col, id] = chave.split('/');
+  const campo = col === 'intercorrencias' ? 'texto' : 'obs';
+  const linha = document.createElement('tr');
+  linha.innerHTML = `<td colspan="6"><div class="card" style="gap:8px"><b>Corrigir ${esc(col === 'checklists' ? 'checklist' : col === 'materiais' ? 'contagem' : 'intercorrência')} de ${esc(r.userNome)}</b>
+    <label>${campo === 'texto' ? 'Texto' : 'Observação'}<textarea id="corrTx">${esc(r[campo] || '')}</textarea></label>
+    <label>Motivo da correção<input id="corrMot" placeholder="Ex.: funcionário pediu para ajustar"></label>
+    <div class="row"><button class="primary" id="corrSalvar">Salvar correção</button><button id="corrApagar">Apagar registro</button><button class="ghost" id="corrFechar">Fechar</button></div>
+    <p id="corrConf" class="small" hidden>Apagar não tem volta. <button class="primary" id="corrSim">Sim, apagar</button></p></div></td>`;
+  tr.after(linha);
+  const motivo = () => $('corrMot').value.trim();
+  $('corrFechar').onclick = () => linha.remove();
+  $('corrSalvar').onclick = async () => {
+    if (!motivo()) { alertaErro('Escreva o motivo da correção.'); return; }
+    try { await updateDoc(doc(db, col, id), { [campo]: $('corrTx').value, corrigidoPor: me.nome, corrigidoEm: serverTimestamp(), motivoCorrecao: motivo() }); registrarAcao(`Corrigiu ${col} de ${r.userNome} (${motivo()})`); toast('Correção salva'); render(); } catch (e) { alertaErro(msgErro(e)); }
+  };
+  $('corrApagar').onclick = () => { if (!motivo()) { alertaErro('Escreva o motivo antes de apagar.'); return; } $('corrConf').hidden = false; };
+  $('corrSim').onclick = async () => {
+    try { await deleteDoc(doc(db, col, id)); registrarAcao(`Apagou ${col} de ${r.userNome} de ${fmt(r.quando)} (${motivo()})`); toast('Registro apagado'); render(); } catch (e) { alertaErro(msgErro(e)); }
+  };
+}
 
 /* ---------- escala (gestão) ---------- */
 async function equipe() { return rows(await getDocs(C('users'))).sort((a, b) => a.nome.localeCompare(b.nome)); }
@@ -517,6 +578,7 @@ VIEWS.escalaGeral = async () => {
   const [lista, eq] = await Promise.all([doMes('escala', ui.escMes), equipe()]);
   lista.sort((a, b) => a.data.localeCompare(b.data) || a.userNome.localeCompare(b.userNome));
   ui.equipe = eq;
+  const semCad = [...new Set(lista.filter(e => !e.user).map(e => e.userNome))];
   const ativos = eq.filter(u => u.ativo && u.perfil === 'plantonista');
   return `<h1>Escala</h1>
   <div class="card"><h2>Lançar plantões</h2><div class="grid2">
@@ -525,14 +587,37 @@ VIEWS.escalaGeral = async () => {
     <label>Viatura<select id="ev">${viaturas().map(v => `<option>${esc(v.id)}</option>`).join('')}</select></label>
     <label>Dias de ${fmtMes(ui.escMes)}<input id="ed" placeholder="Ex.: 1, 4, 7, 10" inputmode="numeric"></label></div>
     <button class="primary" id="eAdd">Lançar</button>
-    <p class="small muted">Digite os dias separados por vírgula. A leitura automática do PDF da escala fica para a fase 3.</p></div>
+    <p class="small muted">Digite os dias separados por vírgula.</p></div>
+  <div class="card"><h2>Importar escala do mês</h2>
+    <p class="small muted">Use o arquivo de escala preparado a partir do PDF (.json). O app liga cada plantão ao funcionário cujo <b>nome completo</b> no cadastro é igual ao da escala (acentos e maiúsculas não importam). Quem ainda não tem cadastro fica como "sem cadastro" e é ligado automaticamente quando for cadastrado com o mesmo nome. Importar de novo o mesmo mês substitui a importação anterior.</p>
+    <input type="file" id="eArq" accept=".json,application/json"><p id="eArqInfo" class="small"></p></div>
   <div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)} (${lista.length} plantões)</h2><button id="mProx">Próximo ›</button></div>
-  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
+  ${semCad.length ? `<p class="small"><span class="pill bad">⚠ ${semCad.length} nome(s) da escala sem cadastro</span> ${esc(semCad.join(', '))}. Cadastre em Funcionários com o nome completo igual ao da escala.</p>` : ''}
+  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
 };
 BIND.escalaGeral = () => {
   $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); };
   $('mProx').onclick = () => { ui.escMes = addMes(ui.escMes, 1); render(); };
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { try { await deleteDoc(doc(db, 'escala', b.dataset.del)); registrarAcao('Removeu plantão da escala'); render(); } catch (e) { alertaErro(msgErro(e)); } });
+  $('eArq').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const info = $('eArqInfo');
+    try {
+      const dados = JSON.parse(await f.text());
+      if (!dados.mes || !Array.isArray(dados.itens)) throw new Error('Arquivo de escala inválido.');
+      info.textContent = 'Importando…';
+      const eq = await equipe();
+      const porNome = new Map(eq.map(u => [normNome(u.nome), u]));
+      const achar = nome => porNome.get(normNome(nome)) || null;
+      const antigos = (await doMes('escala', dados.mes)).filter(x => x.origem === 'importado');
+      const ops = [...antigos.map(x => b => b.delete(doc(db, 'escala', x.id))), ...dados.itens.map(it => b => { const u = achar(it.nome); b.set(doc(C('escala')), { user: u ? u.id : null, userNome: u ? u.nome : it.nome, nomeEscala: normNome(it.nome), cargo: it.cargo || '', data: `${dados.mes}-${pad(it.dia)}`, mes: dados.mes, turno: it.turno, codigo: it.codigo, viatura: '', origem: 'importado', criadoPor: me.uid }); })];
+      for (let i = 0; i < ops.length; i += 400) { const b = writeBatch(db); ops.slice(i, i + 400).forEach(op => op(b)); await b.commit(); }
+      const lig = new Set(dados.itens.filter(it => achar(it.nome)).map(it => normNome(it.nome))).size, tot = new Set(dados.itens.map(it => normNome(it.nome))).size;
+      registrarAcao(`Importou escala de ${fmtMes(dados.mes)} (${dados.itens.length} plantões)`);
+      toast(`${dados.itens.length} plantões importados. ${lig} de ${tot} pessoas ligadas a um cadastro.`);
+      ui.escMes = dados.mes; render();
+    } catch (err) { info.textContent = ''; alertaErro(msgErro(err)); }
+  };
   $('eAdd').onclick = async () => {
     const u = ui.equipe.find(x => x.id === $('eu').value); if (!u) { alertaErro('Cadastre funcionários primeiro.'); return; }
     const [y, m] = ui.escMes.split('-').map(Number); const max = new Date(y, m, 0).getDate();
@@ -575,7 +660,9 @@ BIND.funcionarios = () => {
       await signOut(sauth);
       await setDoc(doc(db, 'users', cred.user.uid), { nome, email, funcao, perfil, ativo: true, criadoEm: serverTimestamp(), criadoPor: me.uid });
       await sendPasswordResetEmail(auth, email);
-      registrarAcao(`Cadastrou ${nome} (${perfilNome(perfil)})`);
+      const pend = rows(await getDocs(query(C('escala'), where('nomeEscala', '==', normNome(nome))))).filter(x => !x.user);
+      for (let i = 0; i < pend.length; i += 400) { const b = writeBatch(db); pend.slice(i, i + 400).forEach(x => b.update(doc(db, 'escala', x.id), { user: cred.user.uid, userNome: nome })); await b.commit(); }
+      registrarAcao(`Cadastrou ${nome} (${perfilNome(perfil)})${pend.length ? ` e ligou ${pend.length} plantão(ões) da escala` : ''}`);
       toast(`${nome} cadastrado(a). E-mail de senha enviado.`); render();
     } catch (e) { alertaErro(msgErro(e)); btn.disabled = false; btn.textContent = 'Cadastrar e enviar e-mail de senha'; }
     finally { deleteApp(sec).catch(() => { }); }
