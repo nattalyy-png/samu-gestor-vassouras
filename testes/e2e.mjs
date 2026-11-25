@@ -30,7 +30,7 @@ await step('admin cadastra coordenador e plantonista', async () => {
   await tab('Funcionários');
   for (const [n, e, f, p] of [['Chefe Coordenador', 'coord@teste.com', 'Coordenador do SAMU', 'coordenador'], ['Carla Mendes', 'carla@teste.com', 'Técnica de enfermagem', 'plantonista'], ['Rafael Lima', 'rafael@teste.com', 'Condutor socorrista', 'plantonista']]) {
     await page.fill('#fn', n); await page.fill('#fe', e); await page.fill('#ff', f); await page.selectOption('#fp', p);
-    await page.click('#fAdd'); await page.waitForSelector(`td:has-text("${e}")`, { timeout: 15000 });
+    await page.click('#fAdd'); await page.waitForSelector(`.precard:has-text("${e}")`, { timeout: 15000 });
   }
   await shot('03-funcionarios');
   await page.waitForSelector('text=Denise Stefanon');
@@ -50,7 +50,7 @@ await step('admin importa escala e liga Carla', async () => {
 });
 await step('cadastro liga plantões da escala', async () => {
   await tab('Funcionários'); await page.fill('#fn', 'Fulano sem cadastro'); await page.fill('#fe', 'fulano@teste.com'); await page.selectOption('#fp', 'plantonista');
-  await page.click('#fAdd'); await page.waitForSelector('td:has-text("fulano@teste.com")', { timeout: 15000 });
+  await page.click('#fAdd'); await page.waitForSelector('.precard:has-text("fulano@teste.com")', { timeout: 15000 });
   await tab('Escala'); if (await page.$('.pill:has-text("sem cadastro")')) throw new Error('ainda sem cadastro');
 });
 if (process.env.ESCALA_PDF) await step('admin importa o PDF da escala', async () => {
@@ -64,7 +64,7 @@ if (process.env.ESCALA_PDF) await step('pré-cadastro a partir da escala', async
 });
 if (process.env.ESCALA_PDF) await step('ligar nome escrito diferente (Camillo)', async () => {
   await page.fill('#fn', 'Camillo Vasconcellos'); await page.fill('#fe', 'camillo@teste.com'); await page.click('#fAdd');
-  await page.waitForSelector('td:has-text("camillo@teste.com")', { timeout: 15000 });
+  await page.waitForSelector('.precard:has-text("camillo@teste.com")', { timeout: 15000 });
   const row = page.locator('.precard', { hasText: 'Camilo Vasconcellos' }); await row.locator('text=Parece ser Camillo').waitFor();
   await row.locator('[data-ligar]').click(); await page.waitForSelector('h2:has-text("Pré-cadastro da escala (25 pessoas)")', { timeout: 15000 });
 });
@@ -138,9 +138,9 @@ await step('coordenador: relatório PDF', async () => {
   await tab('Relatórios'); await shot('13-coord-relatorio');
   const [d] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#rPdf')]); await d.saveAs(`${SHOTS}/relatorio.pdf`);
 });
-await step('coordenador: muda cargo', async () => { await tab('Funcionários'); page.once('dialog', d => d.accept('Enfermeira')); await page.locator('tr', { hasText: 'Carla Mendes' }).locator('[data-cargo]').click(); await page.waitForSelector('tr:has-text("Carla Mendes") >> text=Enfermeira'); });
+await step('coordenador: muda cargo', async () => { await tab('Funcionários'); page.once('dialog', d => d.accept('Enfermeira')); await page.locator('.precard', { hasText: 'carla@teste.com' }).locator('[data-cargo]').click(); await page.waitForSelector('.precard:has-text("carla@teste.com") >> text=Enfermeira'); });
 await step('coordenador: desativa Rafael', async () => {
-  await tab('Funcionários'); const row = page.locator('tr', { hasText: 'Rafael Lima' }); await row.locator('[data-ativo]').click(); await page.waitForSelector('tr:has-text("Rafael Lima") >> text=Desativado');
+  await tab('Funcionários'); const row = page.locator('.precard', { hasText: 'Rafael Lima' }); await row.locator('[data-ativo]').click(); await page.waitForSelector('.precard:has-text("Rafael Lima") >> text=Desativado');
 });
 await step('coordenador: muda status sugestão', async () => { await tab('Sugestões'); await page.selectOption('[data-sug]', 'Em análise'); await page.waitForTimeout(500); });
 await sair();

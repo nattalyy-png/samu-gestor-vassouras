@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 16h55';
+const VERSAO = '25/11 17h05';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -741,12 +741,12 @@ VIEWS.funcionarios = async () => {
   <label>Perfil<select id="fp">${perfis.map(p => `<option value="${p}">${perfilNome(p)}</option>`).join('')}</select></label></div>
   <button class="primary" id="fAdd">Cadastrar e enviar e-mail de senha</button>
   <p class="small muted">O funcionário recebe um e-mail para criar a própria senha (veja também a caixa de spam).</p></div>
-  <div class="card"><h2>Equipe (${eq.filter(u => u.ativo).length} ativos)</h2><div class="tablewrap"><table><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Perfil</th><th>Situação</th><th></th></tr>
-  ${eq.map(u => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${esc(u.funcao)}${pode ? ` <button class="ghost" data-cargo="${u.id}" style="padding:2px 8px;font-size:.8rem">Mudar</button>` : ''}</td>
-    <td>${pode && u.id !== me.uid ? `<select data-perfil="${u.id}" style="width:auto">${perfis.map(p => `<option value="${p}" ${p === u.perfil ? 'selected' : ''}>${perfilNome(p)}</option>`).join('')}</select>` : esc(perfilNome(u.perfil))}</td>
-    <td>${u.ativo ? '<span class="pill ok">Ativo</span>' : '<span class="pill neutral">Desativado</span>'}</td>
-    <td class="row" style="flex-wrap:nowrap">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></td></tr>`; }).join('')}
-  </table></div><p class="small muted">Desativar bloqueia o acesso imediatamente e mantém o histórico do funcionário.</p></div>`;
+  <div class="card"><h2>Equipe (${eq.filter(u => u.ativo).length} ativos)</h2><div class="precad">
+  ${eq.map(u => { const pode = me.perfil === 'admin' || u.perfil !== 'admin'; return `<div class="precard"><div><b>${esc(u.nome)}</b> ${u.ativo ? '<span class="pill ok">Ativo</span>' : '<span class="pill neutral">Desativado</span>'}<br><span class="small muted">${esc(u.email)}</span></div>
+    <div class="row" style="justify-content:space-between"><span>Cargo: <b>${esc(u.funcao || '—')}</b></span>${pode ? `<button data-cargo="${u.id}">✎ Mudar cargo</button>` : ''}</div>
+    <label>Perfil ${pode && u.id !== me.uid ? `<select data-perfil="${u.id}">${perfis.map(p => `<option value="${p}" ${p === u.perfil ? 'selected' : ''}>${perfilNome(p)}</option>`).join('')}</select>` : `<b>${esc(perfilNome(u.perfil))}</b>`}</label>
+    <div class="row">${pode && u.id !== me.uid ? `<button class="ghost" data-ativo="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>` : ''}<button class="ghost" data-senha="${esc(u.email)}">Reenviar senha</button></div></div>`; }).join('')}
+  </div><p class="small muted">Desativar bloqueia o acesso imediatamente e mantém o histórico do funcionário.</p></div>`;
 };
 // Cria a conta, envia o e-mail de senha e liga os plantões da escala com o mesmo nome.
 async function cadastrarFuncionario(nome, email, funcao, perfil) {
