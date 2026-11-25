@@ -54,7 +54,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if active() && (request.auth.uid == uid || isGestao());
+      allow read: if active(); // a equipe vê os colegas (para escolher com quem trocar)
       allow create: if bootstrapAdmin(uid)
         || (isGestao() && validUser() && (request.resource.data.perfil != 'admin' || isAdmin()));
       allow update: if isGestao() && validUser()
@@ -85,8 +85,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     match /escala/{id} {
+      allow read: if active(); // a equipe vê quem está de plantão em cada dia
+      // gestão lança; o funcionário pode lançar extra para si e passar o próprio plantão (troca)
+      allow create: if isGestao() || (active() && request.resource.data.user == request.auth.uid && request.resource.data.origem == 'extra');
+      allow update: if isGestao() || (dono() && request.resource.data.user is string
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['user', 'userNome', 'nomeEscala', 'trocaDe', 'trocaEm']));
+      allow delete: if isGestao() || (dono() && resource.data.origem == 'extra');
+    }
+    // Registro de trocas e extras lançados pelos funcionários (histórico para a gestão).
+    match /pedidos/{id} {
       allow read: if isGestao() || dono();
-      allow write: if isGestao();
+      allow create: if novoRegistro();
+      allow update, delete: if isAdmin();
     }
     // Dados de pacientes (só iniciais): coordenador e admin.
     match /solicitacoes/{id} {

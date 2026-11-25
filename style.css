@@ -164,3 +164,32 @@ nav.bottom svg{width:22px;height:22px}
 .motdet{border:1px solid var(--line);border-left:0;border-radius:12px;padding:10px 14px;background:var(--bg)}
 .motdet summary{font-weight:700;cursor:pointer}
 .motdet p{margin:6px 0 0}
+.so-celular{display:none}
+@media (max-width:899px){
+  .so-celular{display:flex}
+  .shell main{padding-bottom:110px}
+  .topo-gestao nav{display:none}
+}
+.folha{position:fixed;inset:0;z-index:20;background:rgba(15,39,65,.45);display:flex;align-items:flex-end}
+.folha[hidden]{display:none}
+.folha-in{background:var(--surface);width:100%;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));display:grid;gap:8px;max-height:85vh;overflow-y:auto}
+.folha-in > button{text-align:left}
+.folha-in > button[aria-current="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.precad{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.precard{border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px;background:var(--bg)}
+.precard summary{cursor:pointer;color:var(--muted)}
+details.secao{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:0}
+details.secao > summary{padding:16px 18px;font-weight:800;font-size:1.05rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;color:var(--navy)}
+details.secao > summary::after{content:"▾";color:var(--muted)}
+details.secao[open] > summary::after{content:"▴"}
+details.secao > :not(summary){margin:0 18px 16px}
+details.secao[open]{display:grid;gap:12px;padding-bottom:6px}
+details.motivo > summary{cursor:pointer;list-style:none}
+td[data-dia]{cursor:pointer}
+td[data-dia].tem{background:var(--accent-soft)}
+.banner .modo{grid-auto-flow:column;align-items:center}
+nav.bottom.so-celular{display:none}
+@media (max-width:899px){ nav.bottom.so-celular{display:flex} }
+.banner-plant{max-width:720px;margin:14px auto 0;background:rgba(255,255,255,.16);border-radius:12px;padding:8px 12px;font-size:.82rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+.banner-plant .modo{width:auto;grid-auto-flow:column;align-items:center}
+.banner-plant select{padding:4px 8px}

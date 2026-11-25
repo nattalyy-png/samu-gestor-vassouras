@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 15h50';
+const VERSAO = '25/11 16h30';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -182,6 +182,9 @@ async function renderLogin() {
 
 /* ================= estrutura ================= */
 let renderSeq = 0;
+const ICG = { painel: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>', solicitacoes: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>', relatorios: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>', escalaGeral: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>' };
+const SITU = { falta: '⚠ Falta', prob: 'Problema', huv: 'Empenhado HUV', humc: 'Empenhado HUMC' };
+const CURTO = { painel: 'Painel', solicitacoes: 'Ofícios', relatorios: 'Relatórios', escalaGeral: 'Escala' };
 async function render() {
   const seq = ++renderSeq;
   const tabs = TABS[vis()];
@@ -192,19 +195,25 @@ async function render() {
     <aside class="side"><div class="marca"><img src="logo-simbolo.png" alt=""><div><b>SAMU Vassouras</b><small>${esc(perfilNome(me.perfil))}</small></div></div>
       ${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}
       <div class="quem"><span>${esc(me.nome)}</span><small style="opacity:.6">Versão ${VERSAO}</small>${seletorModo(true)}<button id="sair">Sair</button></div></aside>
-    <div style="flex:1;min-width:0"><div class="topo-gestao"><div class="linha"><img src="logo-simbolo.png" alt=""><b>SAMU Vassouras</b>${seletorModo(true).replace('id="modoSel"', 'id="modoSel2"')}<button id="sair2">Sair</button></div>
-      <nav>${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}</nav></div>
-    ${aviso}<main id="main"><div class="spinner">Carregando…</div></main></div></div>`;
+    <div style="flex:1;min-width:0"><div class="topo-gestao"><div class="linha"><img src="logo-simbolo.png" alt=""><b>${esc(tabs.find(t => t[0] === tab)?.[1] || 'SAMU Vassouras')}</b></div></div>
+    ${aviso}<main id="main"><div class="spinner">Carregando…</div></main></div></div>
+    <nav class="bottom so-celular">${tabs.slice(0, 4).map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICG[k] || ''}</svg>${CURTO[k] || l}</button>`).join('')}
+      <button id="maisBtn" aria-current="${tabs.slice(4).some(t => t[0] === tab)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Mais</button></nav>
+    <div class="folha" id="folha" hidden><div class="folha-in"><b>Menu</b>
+      ${tabs.slice(4).map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}
+      ${seletorModo(false).replace('id="modoSel"', 'id="modoSel2"')}<button id="sair2">Sair</button><small class="muted">Versão ${VERSAO}</small>
+      <button class="ghost" id="folhaFechar">Fechar</button></div></div>`;
   } else {
     const IC = { inicio: '<path d="M3 10.5 12 3l9 7.5V21H3z"/>', checklist: '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>', material: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/>', inter: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>', escala: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', sugestoes: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>' };
     const curto = { inicio: 'Início', checklist: 'Checklist', material: 'Material', inter: 'Ocorrência', escala: 'Escala', sugestoes: 'Ideias' };
-    app.innerHTML = `<div class="plant-top"><div class="in"><div class="avatar">${esc(iniciais)}</div><div class="ola"><small>Bom plantão,</small><b>${esc(me.nome.split(' ')[0])}</b></div>${seletorModo(true)}<button id="sair">Sair</button></div></div>
-    ${me.perfil === 'admin' ? '<div class="banner"><div class="wrap">Você está vendo o app como plantonista. O que enviar aqui fica registrado no seu nome.</div></div>' : ''}
+    app.innerHTML = `<div class="plant-top"><div class="in"><div class="avatar">${esc(iniciais)}</div><div class="ola"><small>Bom plantão,</small><b>${esc(me.nome.split(' ')[0])}</b></div><button id="sair">Sair</button></div>
+    ${me.perfil === 'admin' ? `<div class="banner-plant">Vendo como plantonista (o que enviar fica no seu nome). ${seletorModo(false)}</div>` : ''}</div>
     <main class="plant-main" id="main"><div class="card"><div class="spinner">Carregando…</div></div></main>
     <nav class="bottom">${tabs.map(([k]) => `<button data-tab="${k}" aria-current="${k === tab}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>${curto[k] || k}</button>`).join('')}</nav>`;
   }
   app.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
   if ($('sair2')) $('sair2').onclick = () => signOut(auth);
+  if ($('maisBtn')) { $('maisBtn').onclick = () => { $('folha').hidden = false; }; $('folhaFechar').onclick = () => { $('folha').hidden = true; }; $('folha').onclick = e => { if (e.target.id === 'folha') $('folha').hidden = true; }; }
   ['modoSel', 'modoSel2'].forEach(id => { if ($(id)) $(id).onchange = e => { modo = e.target.value; try { localStorage.setItem('samu-modo', modo); } catch (er) { } tab = TABS[vis()][0][0]; ui = {}; render(); window.scrollTo(0, 0); }; });
   $('sair').onclick = () => signOut(auth);
   const main = $('main');
@@ -270,7 +279,9 @@ VIEWS.checklist = async () => {
       <div class="seg" role="group" aria-label="${esc(it.n)}">
         <button data-i="${i}" data-s="ok" class="${it.s === 'ok' ? 'on-ok' : ''}">OK</button>
         <button data-i="${i}" data-s="falta" class="${it.s === 'falta' ? 'on-falta' : ''}">Falta</button>
-        <button data-i="${i}" data-s="prob" class="${it.s === 'prob' ? 'on-prob' : ''}">Problema</button></div>
+        <button data-i="${i}" data-s="prob" class="${it.s === 'prob' ? 'on-prob' : ''}">Problema</button>
+        <button data-i="${i}" data-s="huv" class="${it.s === 'huv' ? 'on-prob' : ''}">Empenhado HUV</button>
+        <button data-i="${i}" data-s="humc" class="${it.s === 'humc' ? 'on-prob' : ''}">Empenhado HUMC</button></div>
       ${it.s !== 'ok' ? `<input class="obs" data-obs="${i}" placeholder="Descreva o que falta ou o problema" value="${esc(it.o)}">` : ''}</div>`).join('')}</div>
     <label>Observação geral (opcional)<textarea id="ckobs" placeholder="Sem nome ou dados de pacientes">${esc(ui.ckObs || '')}</textarea></label>
     <div class="row"><button class="primary" id="ckEnviar">Enviar checklist</button><span class="small muted">${ui.ckItens.filter(i => i.s !== 'ok').length} item(ns) com pendência</span></div>
@@ -327,24 +338,72 @@ BIND.inter = () => $('iEnviar').onclick = () => {
   registrarAcao('Registrou intercorrência'); render();
 };
 
-function calendario(mes, plantoes) {
+async function equipeDoDia(dia) { return rows(await getDocs(query(C('escala'), where('data', '==', dia)))).sort((a, b) => (a.turno || '').localeCompare(b.turno || '') || (a.cargo || '').localeCompare(b.cargo || '') || a.userNome.localeCompare(b.userNome)); }
+function listaEquipe(lista) {
+  if (!lista.length) return '<p class="empty">Ninguém lançado na escala neste dia.</p>';
+  const grupos = {}; lista.forEach(e => (grupos[e.turno || 'Plantão'] ||= []).push(e));
+  return Object.entries(grupos).map(([t, es]) => `<h3 style="margin-top:8px">${esc(t)}</h3>${es.map(e => `<div class="viat"><span>${esc(e.userNome)}${me && e.user === me.uid ? ' <b>(você)</b>' : ''}<br><span class="small muted">${esc(e.cargo || '')}${e.viatura ? ' · ' + esc(e.viatura) : ''}</span></span><span>${e.codigo ? `<span class="pill neutral">${esc(e.codigo)}</span>` : ''}${e.trocaDe ? ' <span class="pill warn">troca</span>' : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</span></div>`).join('')}`).join('');
+}
+async function mostrarEquipe(dia, alvo) {
+  alvo.innerHTML = '<p class="muted">Carregando…</p>';
+  try { const l = await equipeDoDia(dia); alvo.innerHTML = `<div class="card" style="margin-top:12px;background:var(--bg)"><h2>Plantão de ${fmtDia(dia)}</h2>${listaEquipe(l)}</div>`; alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  catch (e) { alvo.innerHTML = `<p class="err">${esc(msgErro(e))}</p>`; }
+}
+function calendario(mes, plantoes, pedidos = []) {
   const [y, m] = mes.split('-').map(Number);
   const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate(), hoje = diaStr();
   const cells = []; for (let i = 0; i < first; i++) cells.push('<td></td>');
   for (let d = 1; d <= days; d++) {
     const ds = `${mes}-${pad(d)}`; const es = plantoes.filter(x => x.data === ds);
-    cells.push(`<td style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}</td>`);
+    cells.push(`<td data-dia="${ds}" class="${es.length ? 'tem' : ''}" style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}${pedidos.filter(p => p.data === ds && p.status === 'pendente').map(p => `<br><span class="pill bad">⏳ ${p.tipo === 'troca' ? 'Troca' : 'Extra'}</span>`).join('')}</td>`);
   }
   const r = []; for (let i = 0; i < cells.length; i += 7) r.push('<tr>' + cells.slice(i, i + 7).join('') + '</tr>');
   return `<div class="tablewrap"><table class="cal"><tr>${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(x => `<th>${x}</th>`).join('')}</tr>${r.join('')}</table></div>`;
 }
 VIEWS.escala = async () => {
   if (!ui.escMes) ui.escMes = mesStr();
-  const minhas = await meus('escala', ui.escMes);
+  const [minhas, prox, pedidos, colegas] = await Promise.all([meus('escala', ui.escMes), meus('escala', addMes(mesStr(), 1)), getDocs(query(C('pedidos'), where('user', '==', me.uid))).then(rows).catch(() => []), getDocs(C('users')).then(rows).catch(() => [])]);
+  ui.colegas = colegas.filter(u => u.ativo && u.id !== me.uid).sort((a, b) => a.nome.localeCompare(b.nome));
+  pedidos.sort(porQuando);
+  const hoje = diaStr();
+  const futuros = [...(ui.escMes === mesStr() ? minhas : await meus('escala')), ...prox].filter(e => e.data >= hoje).sort((a, b) => a.data.localeCompare(b.data));
+  ui.futuros = futuros; ui.tipoPed = ui.tipoPed || 'troca';
   return `<h1>Minha escala</h1><div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)}</h2><button id="mProx">Próximo ›</button></div>
-  ${calendario(ui.escMes, minhas)}<p class="small muted">A escala é lançada pela coordenação.</p></div>`;
+  ${calendario(ui.escMes, minhas)}<p class="small muted">Toque num dia para ver quem está de plantão. Trocas e extras que você lança aparecem na hora.</p>
+  <div id="equipeDia"></div></div>
+  <div class="card"><h2>Lançar troca ou plantão extra</h2>
+    <div class="chips"><button type="button" class="chip" data-tp="troca" aria-pressed="${ui.tipoPed === 'troca'}">Troca de plantão</button><button type="button" class="chip" data-tp="extra" aria-pressed="${ui.tipoPed === 'extra'}">Plantão extra</button></div>
+    ${ui.tipoPed === 'troca' ? `<label>Qual plantão seu<select id="pdPl">${futuros.map((e, i) => `<option value="${i}">${fmtDia(e.data)} · ${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.turno)}</option>`).join('') || '<option value="">Nenhum plantão futuro</option>'}</select></label>
+      <label>Colega que vai assumir<select id="pdCol"><option value="">— escolher —</option>${ui.colegas.map(u => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>`
+    : `<div class="grid2"><label>Data<input id="pdData" type="date" min="${hoje}"></label><label>Turno<select id="pdTurno">${(CFG.turnos || []).concat(['Plantão 24h (diurno/noturno)']).map(t => `<option>${esc(t)}</option>`).join('')}</select></label></div>`}
+    <label>Observação (opcional)<input id="pdObs"></label>
+    <button class="primary" id="pdEnviar">Lançar na escala</button>
+    <p class="small muted">Entra na escala na hora. A coordenação vê quem lançou e quando.</p></div>
+  <div class="card"><h2>Minhas trocas e extras</h2>${pedidos.length ? pedidos.slice(0, 10).map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b><br><span class="small muted">${esc(p.turno)}${p.colegaNome ? ' · assumiu: ' + esc(p.colegaNome) : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('') : '<p class="empty">Nenhuma ainda.</p>'}</div>`;
 };
-BIND.escala = () => { $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); }; $('mProx').onclick = () => { ui.escMes = addMes(ui.escMes, 1); render(); }; };
+BIND.escala = () => {
+  $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); }; $('mProx').onclick = () => { ui.escMes = addMes(ui.escMes, 1); render(); };
+  document.querySelectorAll('[data-tp]').forEach(b => b.onclick = () => { ui.tipoPed = b.dataset.tp; render(); });
+  document.querySelectorAll('td[data-dia]').forEach(td => td.onclick = () => mostrarEquipe(td.dataset.dia, $('equipeDia')));
+  $('pdEnviar').onclick = async () => {
+    const bt = writeBatch(db); let dados;
+    if (ui.tipoPed === 'troca') {
+      const e = ui.futuros[+$('pdPl').value], col = ui.colegas.find(u => u.id === $('pdCol').value);
+      if (!e) { alertaErro('Você não tem plantão futuro para trocar.'); return; }
+      if (!col) { alertaErro('Escolha o colega que vai assumir.'); return; }
+      dados = { tipo: 'troca', data: e.data, turno: (e.codigo ? e.codigo + ' · ' : '') + e.turno, escalaId: e.id, colegaId: col.id, colegaNome: col.nome };
+      bt.update(doc(db, 'escala', e.id), { user: col.id, userNome: col.nome, nomeEscala: normNome(col.nome), trocaDe: me.nome, trocaEm: serverTimestamp() });
+    } else {
+      const d = $('pdData').value; if (!d) { alertaErro('Escolha a data do extra.'); return; }
+      dados = { tipo: 'extra', data: d, turno: $('pdTurno').value };
+      bt.set(doc(C('escala')), { user: me.uid, userNome: me.nome, nomeEscala: normNome(me.nome), data: d, mes: d.slice(0, 7), turno: dados.turno, codigo: 'EXTRA', viatura: '', origem: 'extra', criadoPor: me.uid });
+    }
+    bt.set(doc(C('pedidos')), base({ ...dados, obs: $('pdObs').value.trim(), status: 'lancado' }));
+    const btn = $('pdEnviar'); btn.disabled = true;
+    try { await bt.commit(); registrarAcao(dados.tipo === 'troca' ? `Passou o plantão de ${fmtDia(dados.data)} para ${dados.colegaNome}` : `Lançou plantão extra em ${fmtDia(dados.data)}`); toast(dados.tipo === 'troca' ? 'Troca lançada na escala' : 'Extra lançado na escala'); render(); }
+    catch (e) { alertaErro(msgErro(e)); btn.disabled = false; }
+  };
+};
 
 VIEWS.sugestoes = async () => {
   const lista = gestao() ? rows(await getDocs(query(C('sugestoes'), orderBy('quando', 'desc'), limit(100))))
@@ -362,7 +421,7 @@ BIND.sugestoes = () => {
 /* ================= COORDENAÇÃO ================= */
 VIEWS.painel = async () => {
   const hoje = diaStr();
-  const [cks, mts, inters] = await Promise.all([doDia('checklists', hoje), doDia('materiais', hoje), doMes('intercorrencias', mesStr())]);
+  const [cks, mts, inters, escHoje] = await Promise.all([doDia('checklists', hoje), doDia('materiais', hoje), doMes('intercorrencias', mesStr()), equipeDoDia(hoje).catch(() => [])]);
   const vs = viaturas();
   const pend = cks.flatMap(c => pendencias(c).map(i => ({ ...i, c })));
   const baixos = mts.flatMap(m => abaixoMin(m).map(b => ({ ...b, m })));
@@ -382,9 +441,10 @@ VIEWS.painel = async () => {
     <div class="stat"><span>Itens pendentes</span><b style="color:${pend.length ? 'var(--bad)' : 'var(--ok)'}">${pend.length}</b></div>
     <div class="stat"><span>Material abaixo do mínimo</span><b style="color:${baixos.length ? 'var(--bad)' : 'var(--ok)'}">${baixos.length}</b></div>
     <div class="stat"><span>Intercorrências hoje</span><b>${interH.length}</b></div></div>
+  <div class="card"><h2>Escala de hoje (${escHoje.length})</h2>${listaEquipe(escHoje)}</div>
   <div class="grid2">
     <div class="card"><h2>Situação das viaturas</h2>${vs.map(v => { const s = statusV(v); return `<div class="viat"><div><b>${esc(v.id)}</b><br><span class="small muted">${s.ck ? 'Último checklist: ' + fmt(s.ck.quando) + ' · ' + esc(s.ck.userNome) : 'Sem checklist hoje'}</span></div>${s.pill}</div>`; }).join('')}</div>
-    <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span></div><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${p.s === 'falta' ? '⚠ Falta' : 'Problema'}</span></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}</div></div>
+    <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span></div><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${SITU[p.s] || p.s}</span></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}</div></div>
   <div class="grid2">
     <div class="card"><h2>Intercorrências do mês</h2>${inters.slice(0, 5).map(i => `<div><p class="small muted">${fmt(i.quando)} · ${esc(i.viatura)} · ${esc(i.userNome)} ${gravPill(i.gravidade)}</p><p>${esc(i.texto)}</p></div>`).join('') || '<p class="empty">Nenhuma.</p>'}</div>
     <div class="card"><h2>Envios de hoje</h2>${envios.map(e => `<div class="viat"><span>${esc(e.t)}<br><span class="small muted">${esc(e.u)}</span></span><span class="small muted">${fmt(e.q)}</span></div>`).join('') || '<p class="empty">Nada enviado hoje.</p>'}</div></div>`;
@@ -526,7 +586,7 @@ VIEWS.relatorios = async () => {
   let so = [];
   so = await q('solicitacoes');
   const tab_ = [
-    ...ck.map(c => [c.quando, 'Checklist', c.viatura, c.userNome, pendencias(c).length ? pendencias(c).map(p => `${p.s === 'falta' ? 'FALTA' : 'Problema'}: ${p.n}${p.o ? ' (' + p.o + ')' : ''}`).join('; ') : 'Tudo OK']),
+    ...ck.map(c => [c.quando, 'Checklist', c.viatura, c.userNome, pendencias(c).length ? pendencias(c).map(p => `${(SITU[p.s] || p.s).replace('⚠ ', '').toUpperCase()}: ${p.n}${p.o ? ' (' + p.o + ')' : ''}`).join('; ') : 'Tudo OK']),
     ...mt.map(m => { const b = abaixoMin(m); return [m.quando, 'Contagem de material', m.viatura, m.userNome, `${m.momento} do plantão` + (b.length ? ' · abaixo do mínimo: ' + b.map(x => `${x.n} (${x.q}/${x.min})`).join(', ') : '')]; }),
     ...it.map(i => [i.quando, 'Intercorrência', i.viatura, i.userNome, `${i.tipo} · ${i.gravidade}: ${i.texto}`]),
     ...so.map(s => [s.quando, 'Ofício', s.numero, s.criadoPorNome || 'Coordenação', s.decisao + (s.motivosNomes?.length ? ': ' + s.motivosNomes.join(', ') : '') + ' · ' + s.setor])
@@ -585,7 +645,10 @@ VIEWS.escalaGeral = async () => {
   ui.equipe = eq;
   const semCad = [...new Set(lista.filter(e => !e.user).map(e => e.userNome))];
   const ativos = eq.filter(u => u.ativo && u.perfil === 'plantonista');
-  return `<h1>Escala</h1>
+  const lanc = rows(await getDocs(query(C('pedidos'), where('mes', '==', mesStr())))).sort(porQuando);
+  const cardPed = lanc.length ? `<div class="card"><h2>Trocas e extras lançados pela equipe este mês (${lanc.length})</h2>
+    ${lanc.map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b> · ${esc(p.turno)}<br><span class="small muted">Lançado por ${esc(p.userNome)}${p.colegaNome ? ' · assumiu: ' + esc(p.colegaNome) : ''}${p.obs ? ' · “' + esc(p.obs) + '”' : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('')}</div>` : '';
+  return `<h1>Escala</h1>${cardPed}
   <div class="card"><h2>Lançar plantões</h2><div class="grid2">
     <label>Funcionário<select id="eu">${ativos.map(u => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>
     <label>Turno<select id="et">${(CFG.turnos || []).map(t => `<option>${esc(t)}</option>`).join('')}</select></label>
@@ -598,7 +661,7 @@ VIEWS.escalaGeral = async () => {
     <input type="file" id="eArq"><p id="eArqInfo" class="small"></p></div>
   <div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)} (${lista.length} plantões)</h2><button id="mProx">Próximo ›</button></div>
   ${semCad.length ? `<p class="small"><span class="pill bad">⚠ ${semCad.length} nome(s) da escala sem cadastro</span> ${esc(semCad.join(', '))}. Cadastre em Funcionários com o nome completo igual ao da escala.</p>` : ''}
-  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
+  <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}${e.trocaDe ? ` <span class="pill warn">troca com ${esc(e.trocaDe)}</span>` : ''}${e.origem === 'extra' ? ' <span class="pill warn">extra</span>' : ''}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
 };
 BIND.escalaGeral = () => {
   $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); };
@@ -659,10 +722,13 @@ VIEWS.funcionarios = async () => {
   return `<h1>Funcionários</h1>
   ${ui.pre.length ? `<div class="card"><h2>Pré-cadastro da escala (${ui.pre.length} pessoas)</h2>
   <p class="small muted">Estas pessoas estão na escala mas ainda não têm acesso. Confira o cargo, digite o e-mail e clique em Cadastrar: a pessoa recebe o e-mail para criar a senha e os plantões dela já ficam ligados.</p>
-  <div class="tablewrap"><table><tr><th>Nome (como na escala)</th><th>Cargo</th><th>E-mail</th><th>Perfil</th><th></th><th>Ou já tem cadastro?</th></tr>
-  ${ui.pre.map((p, i) => `<tr><td><b>${esc(p.nome)}</b><br><span class="small muted">${p.n} plantão(ões)</span></td><td><input id="pf${i}" value="${esc(p.cargo)}" style="min-width:150px"></td><td><input id="pe${i}" type="email" placeholder="email@exemplo.com" style="min-width:200px"></td>
-  <td><select id="pp${i}" style="width:auto">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></td><td><button class="primary" data-pre="${i}">Cadastrar</button></td>
-  <td><div class="row" style="flex-wrap:nowrap"><select id="pl${i}" style="width:auto;max-width:190px"><option value="">— escolher —</option>${eq.map(u => `<option value="${u.id}" ${p.sugestao && p.sugestao.id === u.id ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select><button data-ligar="${i}">Ligar</button></div>${p.sugestao ? `<span class="small" style="color:var(--warn)">⚠ Parece ser ${esc(p.sugestao.nome)}</span>` : ''}</td></tr>`).join('')}</table></div>
+  <div class="precad">${ui.pre.map((p, i) => `<div class="precard"><div><b>${esc(p.nome)}</b> <span class="small muted">· ${p.n} plantão(ões)</span></div>
+    <label>Cargo<input id="pf${i}" value="${esc(p.cargo)}"></label>
+    <label>E-mail<input id="pe${i}" type="email" inputmode="email" placeholder="email@exemplo.com"></label>
+    <label>Perfil<select id="pp${i}">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></label>
+    <button class="primary" data-pre="${i}">Cadastrar e enviar senha</button>
+    <details ${p.sugestao ? 'open' : ''}><summary class="small">${p.sugestao ? `⚠ Parece ser ${esc(p.sugestao.nome)}, que já tem cadastro` : 'Já tem cadastro com outro nome?'}</summary>
+      <div class="row" style="margin-top:6px"><select id="pl${i}" style="flex:1"><option value="">— escolher —</option>${eq.map(u => `<option value="${u.id}" ${p.sugestao && p.sugestao.id === u.id ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select><button data-ligar="${i}">Ligar</button></div></details></div>`).join('')}</div>
   <p class="small muted">Se a pessoa já foi cadastrada com o nome escrito diferente (ex.: Camillo × Camilo), escolha o cadastro dela em "Ou já tem cadastro?" e clique em Ligar. Os plantões passam para ela na hora, sem novo e-mail.</p></div>` : ''}
   <div class="card"><h2>Cadastrar funcionário</h2><div class="grid2"><label>Nome<input id="fn"></label><label>E-mail<input id="fe" type="email"></label><label>Função<input id="ff" placeholder="Ex.: Técnico de enfermagem"></label>
   <label>Perfil<select id="fp">${perfis.map(p => `<option value="${p}">${perfilNome(p)}</option>`).join('')}</select></label></div>
@@ -740,31 +806,33 @@ VIEWS.config = async () => {
   return `<h1>Listas e ofícios</h1>
   <p class="muted">Aqui ficam as listas usadas no app. Um item por linha. Mudanças valem para os próximos registros; o que já foi enviado não muda.</p>
   ${CFG.exemplo ? '<div class="card" style="border-color:var(--bad)"><p><span class="pill bad">⚠ Exemplos</span> Estas listas ainda são de exemplo. Troque pelas listas oficiais do coordenador e salve.</p></div>' : ''}
-  <div class="card lista-edit"><h2>Viaturas, checklists e materiais</h2><div class="grid2">
+  <details class="secao lista-edit"><summary>Viaturas e turnos <span class="muted small">${(CFG.viaturas || []).length} viaturas</span></summary><div class="grid2">
     ${ta('cViat', 'Viaturas', CFG.viaturas, 'Formato: nome; tipo (USB ou USA). Ex.: USB-01; USB')}
-    ${ta('cTurnos', 'Turnos', CFG.turnos)}
+    ${ta('cTurnos', 'Turnos', CFG.turnos)}</div></details>
+  <details class="secao lista-edit"><summary>Checklists USB e USA <span class="muted small">${(CFG.checkUSB || []).length} + ${(CFG.checkUSA || []).length} itens</span></summary><div class="grid2">
     ${ta('cUSB', 'Checklist USB', CFG.checkUSB)}
-    ${ta('cUSA', 'Checklist USA', CFG.checkUSA)}
+    ${ta('cUSA', 'Checklist USA', CFG.checkUSA)}</div></details>
+  <details class="secao lista-edit"><summary>Materiais e intercorrências <span class="muted small">${(CFG.materiais || []).length} materiais</span></summary><div class="grid2">
     ${ta('cMat', 'Materiais para contagem', CFG.materiais, 'Opcional: ; quantidade mínima. Ex.: Gazes (pacotes); 10')}
-    ${ta('cTipos', 'Tipos de intercorrência', CFG.tiposInter)}</div></div>
-  <div class="card"><h2>Cabeçalho e textos do ofício</h2><div class="grid2">
+    ${ta('cTipos', 'Tipos de intercorrência', CFG.tiposInter)}</div></details>
+  <details class="secao"><summary>Cabeçalho do ofício e texto da autorização</summary><div class="grid2">
     <label>Linha 1 do cabeçalho<input id="cCab1" value="${esc(CFG.cab1)}"></label><label>Linha 2 do cabeçalho<input id="cCab2" value="${esc(CFG.cab2)}"></label>
     <label>Cidade<input id="cCid" value="${esc(CFG.cidade)}"></label><label>Assinatura<input id="cAss" value="${esc(CFG.assinatura)}"></label></div>
     <label>Texto da autorização (use {paciente} onde entram as iniciais)<textarea id="cAut">${esc(CFG.textoAutorizacao)}</textarea></label>
-    <label>Parágrafo final da negativa<textarea id="cFim">${esc(CFG.textoFinalNegativa)}</textarea></label></div>
-  <div class="card"><h2>Motivos de negativa e base legal</h2>
+    <label>Parágrafo final da negativa<textarea id="cFim">${esc(CFG.textoFinalNegativa)}</textarea></label></details>
+  <details class="secao" ${ui.motAberto != null ? 'open' : ''}><summary>Motivos de negativa e base legal <span class="muted small">${ui.motivos.length} motivos</span></summary>
     <p class="small muted">O texto do motivo entra depois de "considerando que…". As leis repetidas entre motivos aparecem uma vez só no ofício.</p>
-    ${ui.motivos.map((m, i) => `<div class="motivo"><label>Nome do motivo<input data-mn="${i}" value="${esc(m.nome)}"></label>
+    ${ui.motivos.map((m, i) => `<details class="motivo" ${ui.motAberto === i ? 'open' : ''}><summary><b>${esc(m.nome || 'Novo motivo')}</b> <span class="small muted">${(m.base || []).length} lei(s)</span></summary><label>Nome do motivo<input data-mn="${i}" value="${esc(m.nome)}"></label>
       <label>Texto<textarea data-mt="${i}">${esc(m.texto)}</textarea></label>
       <label>Leis e portarias (uma por linha)<textarea data-mb="${i}" style="min-height:60px">${esc((m.base || []).join('\n'))}</textarea></label>
-      <div><button class="ghost" data-mdel="${i}">Remover este motivo</button></div></div>`).join('')}
-    <div><button id="mNovo">+ Adicionar motivo</button></div></div>
+      <div><button class="ghost" data-mdel="${i}">Remover este motivo</button></div></details>`).join('')}
+    <div><button id="mNovo">+ Adicionar motivo</button></div></details>
   ${CFG.exemplo ? '<label class="row" style="font-weight:500"><input type="checkbox" id="cOficial" style="width:auto"> Estas já são as listas oficiais (tira o aviso de "exemplo")</label>' : ''}
   <div class="row"><button class="primary" id="cSalvar">Salvar tudo</button><button class="ghost" id="cDesfazer">Descartar mudanças</button></div>`;
 };
 BIND.config = () => {
   const lerMotivos = () => ui.motivos.forEach((m, i) => { m.nome = document.querySelector(`[data-mn="${i}"]`).value.trim(); m.texto = document.querySelector(`[data-mt="${i}"]`).value.trim(); m.base = linhas(document.querySelector(`[data-mb="${i}"]`).value); });
-  $('mNovo').onclick = () => { lerMotivos(); ui.motivos.push({ id: 'm' + Date.now().toString(36), nome: '', texto: '', base: [] }); render(); };
+  $('mNovo').onclick = () => { lerMotivos(); ui.motivos.push({ id: 'm' + Date.now().toString(36), nome: '', texto: '', base: [] }); ui.motAberto = ui.motivos.length - 1; render(); };
   document.querySelectorAll('[data-mdel]').forEach(b => b.onclick = () => { lerMotivos(); ui.motivos.splice(+b.dataset.mdel, 1); render(); });
   $('cDesfazer').onclick = () => { ui.motivos = null; render(); };
   $('cSalvar').onclick = async () => {

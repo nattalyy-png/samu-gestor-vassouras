@@ -36,10 +36,10 @@ await step('admin cadastra coordenador e plantonista', async () => {
   await page.waitForSelector('text=Denise Stefanon');
 });
 await step('admin edita listas', async () => {
-  await tab('Listas e ofícios'); await shot('04-listas');
+  await tab('Listas e ofícios'); await page.click('summary:has-text("Viaturas e turnos")'); await shot('04-listas');
   await page.fill('#cViat', 'USB-01; USB\nUSB-02; USB\nUSA-01; USA\nUSB-03; USB');
   await page.click('#cSalvar'); await page.waitForTimeout(800);
-  await tab('Listas e ofícios');
+  await tab('Listas e ofícios'); await page.click('summary:has-text("Viaturas e turnos")');
   if (!(await page.inputValue('#cViat')).includes('USB-03')) throw new Error('lista não salvou');
 });
 await step('admin importa escala e liga Carla', async () => {
@@ -65,11 +65,19 @@ if (process.env.ESCALA_PDF) await step('pré-cadastro a partir da escala', async
 if (process.env.ESCALA_PDF) await step('ligar nome escrito diferente (Camillo)', async () => {
   await page.fill('#fn', 'Camillo Vasconcellos'); await page.fill('#fe', 'camillo@teste.com'); await page.click('#fAdd');
   await page.waitForSelector('td:has-text("camillo@teste.com")', { timeout: 15000 });
-  const row = page.locator('tr', { hasText: 'Camilo Vasconcellos' }); await row.locator('text=Parece ser Camillo').waitFor();
+  const row = page.locator('.precard', { hasText: 'Camilo Vasconcellos' }); await row.locator('text=Parece ser Camillo').waitFor();
   await row.locator('[data-ligar]').click(); await page.waitForSelector('h2:has-text("Pré-cadastro da escala (25 pessoas)")', { timeout: 15000 });
 });
 await step('admin vê aba de solicitações', async () => { await page.waitForSelector('[data-tab="solicitacoes"]'); });
 await step('admin cópia de segurança', async () => { await tab('Cópia de segurança'); const [d] = await Promise.all([page.waitForEvent('download'), page.click('#bkBaixar')]); await d.saveAs(`${SHOTS}/backup.json`); });
+await step('celular: menu inferior da gestão', async () => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300);
+  await page.click('#maisBtn'); await page.waitForSelector('#folha:not([hidden])'); await shot('30-celular-mais');
+  await page.click('#folha [data-tab="funcionarios"]'); await page.waitForSelector('#main h1'); await page.waitForTimeout(400); await shot('31-celular-precad');
+  await page.locator('nav.bottom [data-tab="painel"]').click(); await page.waitForSelector('h2:has-text("Escala de hoje")'); await shot('32-celular-painel');
+  await page.setViewportSize({ width: 1200, height: 900 });
+});
+await step('listas em seções', async () => { await tab('Listas e ofícios'); await page.click('summary:has-text("Motivos de negativa")'); await page.locator('details.motivo summary').first().click(); await shot('33-listas-secoes'); });
 await sair();
 await setPass('coord@teste.com', 'coord123'); await setPass('carla@teste.com', 'carla123');
 
@@ -97,13 +105,20 @@ await step('plantonista: intercorrência', async () => {
   await page.click('#iEnviar'); await page.waitForSelector('p:has-text("Monitor desligou")', { timeout: 10000 });
 });
 await step('plantonista: escala e sugestão', async () => {
-  await tab('Escala'); await shot('09-plant-escala');
+  await tab('Escala'); await page.locator('td[data-dia].tem').first().click(); await page.waitForSelector('h2:has-text("Plantão de")'); await shot('09-plant-escala');
   await tab('Ideias'); await page.fill('#stx', 'Anexar foto quando algo quebrar'); await page.click('#sEnviar'); await page.waitForSelector('p:has-text("Anexar foto")', { timeout: 10000 });
+});
+await step('plantonista: lança extra e troca', async () => {
+  await tab('Escala'); await page.click('[data-tp="extra"]'); await page.fill('#pdData', '2026-11-29'); await page.click('#pdEnviar');
+  await page.waitForSelector('text=Extra · 29/11/2026', { timeout: 10000 });
+  await page.click('[data-tp="troca"]'); await page.selectOption('#pdCol', { label: 'Rafael Lima' }); await page.click('#pdEnviar');
+  await page.waitForSelector('text=assumiu: Rafael Lima', { timeout: 10000 }); await shot('09b-troca-extra');
 });
 await sair();
 await step('coordenador: painel com pendências', async () => {
   await login('coord@teste.com', 'coord123'); await page.waitForSelector('text=Cilindro vazio'); await page.waitForSelector('text=⚠ Abaixo do mínimo'); await shot('10-coord-painel');
 });
+await step('coordenador vê trocas e extras', async () => { await tab('Escala'); await page.waitForSelector('text=Lançado por Carla Mendes'); await page.waitForSelector('.pill:has-text("extra")'); await shot('09c-coord-trocas'); });
 await step('coordenador: negativa com ofício PDF', async () => {
   await tab('Solicitações e ofícios'); await page.click('#novaSol');
   await page.fill('#sp', 'J. S.'); await page.fill('#ss', 'Hospital Exemplo'); await page.fill('#sq', 'Consulta eletiva');

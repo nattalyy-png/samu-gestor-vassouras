@@ -24,7 +24,7 @@ await t('coord NÃO cria admin', assertFails(setDoc(doc(db('coord'), 'users/x'),
 await t('coord NÃO rebaixa admin', assertFails(updateDoc(doc(db('coord'), 'users/denise'), { perfil: 'plantonista' })));
 await t('plantonista não se promove', assertFails(updateDoc(doc(db('p1'), 'users/p1'), { perfil: 'coordenador' })));
 await t('plantonista lê o próprio perfil', assertSucceeds(getDoc(doc(db('p1'), 'users/p1'))));
-await t('plantonista não lê perfil alheio', assertFails(getDoc(doc(db('p1'), 'users/p2'))));
+await t('plantonista vê nome de colega', assertSucceeds(getDoc(doc(db('p1'), 'users/p2'))));
 await t('plantonista lê listas', assertSucceeds(getDoc(doc(db('p1'), 'config/listas'))));
 await t('plantonista não altera listas', assertFails(setDoc(doc(db('p1'), 'config/listas'), { y: 1 })));
 await t('admin altera listas', assertSucceeds(setDoc(doc(db('denise'), 'config/listas'), { y: 1 })));
@@ -48,7 +48,12 @@ await t('plantonista NÃO vê solicitações', assertFails(getDoc(doc(db('p1'), 
 // escala
 await t('coord lança escala', assertSucceeds(setDoc(doc(db('coord'), 'escala/e1'), { user: 'p1', mes: '2026-11', data: '2026-11-26' })));
 await t('p1 vê a própria escala', getDocs(query(collection(db('p1'), 'escala'), where('user', '==', 'p1'), where('mes', '==', '2026-11'))).then(s => { if (s.size !== 1) throw new Error(); }));
-await t('p2 não lança escala', assertFails(setDoc(doc(db('p2'), 'escala/e2'), { user: 'p2' })));
+await t('p2 não lança escala comum', assertFails(setDoc(doc(db('p2'), 'escala/e2'), { user: 'p2' })));
+await t('p2 lança extra para si', assertSucceeds(setDoc(doc(db('p2'), 'escala/e3'), { user: 'p2', origem: 'extra', mes: '2026-11', data: '2026-11-27' })));
+await t('p2 não lança extra para outro', assertFails(setDoc(doc(db('p2'), 'escala/e4'), { user: 'p1', origem: 'extra' })));
+await t('p2 não pega plantão de p1', assertFails(updateDoc(doc(db('p2'), 'escala/e1'), { user: 'p2', userNome: 'P2' })));
+await t('p1 passa o próprio plantão para p2', assertSucceeds(updateDoc(doc(db('p1'), 'escala/e1'), { user: 'p2', userNome: 'P2', nomeEscala: 'P2', trocaDe: 'P1' })));
+await t('p1 não muda a data do plantão', assertFails(updateDoc(doc(db('p2'), 'escala/e1'), { data: '2026-11-30' })));
 // sugestões
 await t('p1 sugere', assertSucceeds(setDoc(doc(db('p1'), 'sugestoes/g1'), reg('p1', { texto: 'a', status: 'Nova' }))));
 await t('coord muda status', assertSucceeds(updateDoc(doc(db('coord'), 'sugestoes/g1'), { status: 'Feita' })));
