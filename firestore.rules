@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Regras de segurança do SAMU Gestor.
+// Perfis: plantonista (vê só o que é seu), coordenador (vê tudo, inclusive
+// solicitações com dados de pacientes), admin (cadastros, configurações e
+// cópia de segurança; NÃO vê solicitações de pacientes, conforme a LGPD).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function setupPath() { return /databases/$(database)/documents/config/setup; }
+    function me() { return get(userPath(request.auth.uid)).data; }
+    function active() { return signedIn() && exists(userPath(request.auth.uid)) && me().ativo == true; }
+    function isAdmin() { return active() && me().perfil == 'admin'; }
+    function isCoordenador() { return active() && me().perfil == 'coordenador'; }
+    // "Gestão": coordenador ou admin (painel, relatórios, cadastros, configurações)
+    function isGestao() { return active() && me().perfil in ['coordenador', 'admin']; }
+
+    function validUser() {
+      let d = request.resource.data;
+      return d.nome is string && d.nome.size() > 0
+        && d.email is string
+        && d.perfil in ['plantonista', 'coordenador', 'admin']
+        && d.ativo is bool;
+    }
+
+    // Registro novo feito pelo próprio funcionário, com hora do servidor.
+    function novoRegistro() {
+      let d = request.resource.data;
+      return active() && d.user == request.auth.uid && d.quando == request.time
+        && d.dia is string && d.mes is string;
+    }
+    function dono() { return active() && resource.data.user == request.auth.uid; }
+
+    // Primeiro acesso: a primeira conta vira admin, uma única vez.
+    function bootstrapAdmin(uid) {
+      return signedIn() && request.auth.uid == uid
+        && !exists(setupPath()) && existsAfter(setupPath())
+        && request.resource.data.perfil == 'admin' && request.resource.data.ativo == true;
+    }
+
+    match /config/setup {
+      allow read: if true;
+      allow create: if signedIn() && !exists(setupPath())
+        && getAfter(userPath(request.auth.uid)).data.perfil == 'admin';
+      allow update, delete: if false;
+    }
+    match /config/listas {
+      allow read: if active();
+      allow write: if isGestao() || (signedIn() && !exists(setupPath()) && existsAfter(setupPath()));
+    }
+    match /config/contador {
+      allow read, write: if isCoordenador();
+    }
+
+    match /users/{uid} {
+      allow read: if active() && (request.auth.uid == uid || isGestao());
+      allow create: if bootstrapAdmin(uid)
+        || (isGestao() && validUser() && (request.resource.data.perfil != 'admin' || isAdmin()));
+      allow update: if isGestao() && validUser()
+        && (isAdmin() || (resource.data.perfil != 'admin' && request.resource.data.perfil != 'admin'));
+      allow delete: if false;
+    }
+
+    match /checklists/{id} {
+      allow read: if isGestao() || dono();
+      allow create: if novoRegistro();
+      allow update, delete: if isAdmin();
+    }
+    match /materiais/{id} {
+      allow read: if isGestao() || dono();
+      allow create: if novoRegistro();
+      allow update, delete: if isAdmin();
+    }
+    match /intercorrencias/{id} {
+      allow read: if isGestao() || dono();
+      allow create: if novoRegistro();
+      allow update, delete: if isAdmin();
+    }
+    match /sugestoes/{id} {
+      allow read: if isGestao() || dono();
+      allow create: if novoRegistro();
+      allow update: if isGestao()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isAdmin();
+    }
+    match /escala/{id} {
+      allow read: if isGestao() || dono();
+      allow write: if isGestao();
+    }
+    // Dados de pacientes: somente o coordenador.
+    match /solicitacoes/{id} {
+      allow read, create, update: if isCoordenador();
+      allow delete: if false;
+    }
+    match /log/{id} {
+      allow read: if isGestao();
+      allow create: if active() && request.resource.data.user == request.auth.uid
+        && request.resource.data.quando == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
