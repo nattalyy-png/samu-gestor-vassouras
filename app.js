@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 18h45';
+const VERSAO = '25/11 19h00';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -417,7 +417,8 @@ function calendario(mes, plantoes, pedidos = []) {
   const cells = []; for (let i = 0; i < first; i++) cells.push('<td></td>');
   for (let d = 1; d <= days; d++) {
     const ds = `${mes}-${pad(d)}`; const es = plantoes.filter(x => x.data === ds && !x.substituidoPor);
-    cells.push(`<td data-dia="${ds}" class="${es.length ? 'tem' : ''}" style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}${pedidos.filter(p => p.data === ds && p.status === 'pendente').map(p => `<br><span class="pill bad">⏳ ${p.tipo === 'troca' ? 'Troca' : 'Extra'}</span>`).join('')}</td>`);
+    const passei = pedidos.filter(p => p.tipo === 'troca' && p.data === ds), cubro = pedidos.filter(p => (p.tipo === 'troca' && p.dataCobre === ds) || (p.tipo === 'extra' && p.data === ds));
+    cells.push(`<td data-dia="${ds}" class="${es.length || cubro.length ? 'tem' : ''}" style="${ds === hoje ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}"><b>${d}</b>${es.map(e => `<br><span class="pill ${/^diurno/i.test(e.turno) ? 'warn' : 'neutral'}" title="${esc(e.turno)}">${esc(e.codigo || e.turno.split(' ')[0])} ${esc(e.viatura || '')}</span>`).join('')}${passei.map(p => `<br><span class="pill bad" title="Você passou este plantão para ${esc(p.colegaNome || '')}">↪ Trocado</span>`).join('')}${cubro.map(p => `<br><span class="pill ok" title="${p.tipo === 'extra' ? 'Plantão extra' : 'Troca com ' + esc(p.colegaNome || '')}">${p.tipo === 'extra' ? '+ Extra' : '↩ Troca'}</span>`).join('')}</td>`);
   }
   const r = []; for (let i = 0; i < cells.length; i += 7) r.push('<tr>' + cells.slice(i, i + 7).join('') + '</tr>');
   return `<div class="tablewrap"><table class="cal"><tr>${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(x => `<th>${x}</th>`).join('')}</tr>${r.join('')}</table></div>`;
@@ -431,17 +432,18 @@ VIEWS.escala = async () => {
   const futuros = [...(ui.escMes === mesStr() ? minhas : await meus('escala')), ...prox].filter(e => e.data >= hoje).sort((a, b) => a.data.localeCompare(b.data));
   ui.futuros = futuros; ui.tipoPed = ui.tipoPed || 'troca';
   return `<h1>Minha escala</h1><div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)}</h2><button id="mProx">Próximo ›</button></div>
-  ${calendario(ui.escMes, minhas)}<p class="small muted">Toque num dia para ver quem está de plantão. Trocas e extras que você lança aparecem na hora.</p>
+  ${calendario(ui.escMes, minhas, pedidos)}<p class="small muted">Toque num dia para ver quem está de plantão. <span class="pill bad">↪ Trocado</span> é o plantão que você passou; <span class="pill ok">↩ Troca</span> e <span class="pill ok">+ Extra</span> são os dias em que você vai trabalhar. Só você e a coordenação veem essas marcações.</p>
   <div id="equipeDia"></div></div>
   <div class="card"><h2>Lançar troca ou plantão extra</h2>
     <div class="chips"><button type="button" class="chip" data-tp="troca" aria-pressed="${ui.tipoPed === 'troca'}">Troca de plantão</button><button type="button" class="chip" data-tp="extra" aria-pressed="${ui.tipoPed === 'extra'}">Plantão extra</button></div>
     ${ui.tipoPed === 'troca' ? `<label>Qual plantão seu<select id="pdPl">${futuros.map((e, i) => `<option value="${i}">${fmtDia(e.data)} · ${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.turno)}</option>`).join('') || '<option value="">Nenhum plantão futuro</option>'}</select></label>
-      <label>Colega que vai assumir<select id="pdCol"><option value="">— escolher —</option>${ui.colegas.map(u => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>`
+      <label>Colega que vai assumir<select id="pdCol"><option value="">— escolher —</option>${ui.colegas.map(u => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>
+      <label>Dia em que você vai cobrir o colega (opcional)<input id="pdCobre" type="date" min="${hoje}"></label>`
     : `<div class="grid2"><label>Data<input id="pdData" type="date" min="${hoje}"></label><label>Turno<select id="pdTurno">${(CFG.turnos || []).concat(['Plantão 24h (diurno/noturno)']).map(t => `<option>${esc(t)}</option>`).join('')}</select></label></div>`}
     <label>Observação (opcional)<input id="pdObs"></label>
     <button class="primary" id="pdEnviar">Lançar na escala</button>
-    <p class="small muted">Entra na escala na hora. A coordenação vê quem lançou e quando.</p></div>
-  <div class="card"><h2>Minhas trocas e extras</h2>${pedidos.length ? pedidos.slice(0, 10).map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b><br><span class="small muted">${esc(p.turno)}${p.colegaNome ? ' · assumiu: ' + esc(p.colegaNome) : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('') : '<p class="empty">Nenhuma ainda.</p>'}</div>`;
+    <p class="small muted">Aparece só no seu calendário e no registro da coordenação. A escala oficial do dia não muda.</p></div>
+  <div class="card"><h2>Minhas trocas e extras</h2>${pedidos.length ? pedidos.slice(0, 10).map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b><br><span class="small muted">${esc(p.turno)}${p.colegaNome ? ' · assume: ' + esc(p.colegaNome) : ''}${p.dataCobre ? ' · você cobre em ' + fmtDia(p.dataCobre) : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('') : '<p class="empty">Nenhuma ainda.</p>'}</div>`;
 };
 BIND.escala = () => {
   $('mAnt').onclick = () => { ui.escMes = addMes(ui.escMes, -1); render(); }; $('mProx').onclick = () => { ui.escMes = addMes(ui.escMes, 1); render(); };
@@ -453,16 +455,15 @@ BIND.escala = () => {
       const e = ui.futuros[+$('pdPl').value], col = ui.colegas.find(u => u.id === $('pdCol').value);
       if (!e) { alertaErro('Você não tem plantão futuro para trocar.'); return; }
       if (!col) { alertaErro('Escolha o colega que vai assumir.'); return; }
-      dados = { tipo: 'troca', data: e.data, turno: (e.codigo ? e.codigo + ' · ' : '') + e.turno, escalaId: e.id, colegaId: col.id, colegaNome: col.nome };
-      bt.update(doc(db, 'escala', e.id), { user: col.id, userNome: col.nome, nomeEscala: normNome(col.nome), trocaDe: me.nome, trocaEm: serverTimestamp() });
+      const cobre = $('pdCobre').value;
+      dados = { tipo: 'troca', data: e.data, turno: (e.codigo ? e.codigo + ' · ' : '') + e.turno, escalaId: e.id, colegaId: col.id, colegaNome: col.nome, dataCobre: cobre || '' };
     } else {
       const d = $('pdData').value; if (!d) { alertaErro('Escolha a data do extra.'); return; }
       dados = { tipo: 'extra', data: d, turno: $('pdTurno').value };
-      bt.set(doc(C('escala')), { user: me.uid, userNome: me.nome, nomeEscala: normNome(me.nome), data: d, mes: d.slice(0, 7), turno: dados.turno, codigo: 'EXTRA', viatura: '', origem: 'extra', criadoPor: me.uid });
     }
     bt.set(doc(C('pedidos')), base({ ...dados, obs: $('pdObs').value.trim(), status: 'lancado' }));
     const btn = $('pdEnviar'); btn.disabled = true;
-    try { await bt.commit(); registrarAcao(dados.tipo === 'troca' ? `Passou o plantão de ${fmtDia(dados.data)} para ${dados.colegaNome}` : `Lançou plantão extra em ${fmtDia(dados.data)}`); toast(dados.tipo === 'troca' ? 'Troca lançada na escala' : 'Extra lançado na escala'); render(); }
+    try { await bt.commit(); registrarAcao(dados.tipo === 'troca' ? `Passou o plantão de ${fmtDia(dados.data)} para ${dados.colegaNome}` : `Lançou plantão extra em ${fmtDia(dados.data)}`); toast(dados.tipo === 'troca' ? 'Troca marcada no seu calendário' : 'Extra marcado no seu calendário'); render(); }
     catch (e) { alertaErro(msgErro(e)); btn.disabled = false; }
   };
 };
@@ -723,7 +724,7 @@ VIEWS.escalaGeral = async () => {
   const ativos = eq.filter(u => u.ativo && u.perfil === 'plantonista');
   const lanc = rows(await getDocs(query(C('pedidos'), where('mes', '==', mesStr())))).sort(porQuando);
   const cardPed = lanc.length ? `<div class="card"><h2>Trocas e extras lançados pela equipe este mês (${lanc.length})</h2>
-    ${lanc.map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b> · ${esc(p.turno)}<br><span class="small muted">Lançado por ${esc(p.userNome)}${p.colegaNome ? ' · assumiu: ' + esc(p.colegaNome) : ''}${p.obs ? ' · “' + esc(p.obs) + '”' : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('')}</div>` : '';
+    ${lanc.map(p => `<div class="viat"><div><b>${p.tipo === 'troca' ? 'Troca' : 'Extra'} · ${fmtDia(p.data)}</b> · ${esc(p.turno)}<br><span class="small muted">Lançado por ${esc(p.userNome)}${p.colegaNome ? ' · assume: ' + esc(p.colegaNome) : ''}${p.dataCobre ? ' · cobre o colega em ' + fmtDia(p.dataCobre) : ''}${p.obs ? ' · “' + esc(p.obs) + '”' : ''}</span></div><span class="small muted">${fmt(p.quando)}</span></div>`).join('')}</div>` : '';
   return `<h1>Escala</h1>${cardPed}
   <div class="card"><h2>Lançar plantões</h2><div class="grid2">
     <label>Funcionário<select id="eu">${ativos.map(u => `<option value="${u.id}">${esc(u.nome)}</option>`).join('')}</select></label>
