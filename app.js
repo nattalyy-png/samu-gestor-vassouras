@@ -50,7 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
-const VERSAO = '25/11 16h30';
+const VERSAO = '25/11 16h45';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -287,11 +287,16 @@ VIEWS.checklist = async () => {
     <div class="row"><button class="primary" id="ckEnviar">Enviar checklist</button><span class="small muted">${ui.ckItens.filter(i => i.s !== 'ok').length} item(ns) com pendência</span></div>
   </div>`;
 };
+BIND.painel = () => document.querySelectorAll('[data-and]').forEach(sel => sel.onchange = () => {
+  const [id, k] = sel.dataset.and.split('|');
+  const obs = sel.value === 'Pendente' ? '' : (prompt('Observação (opcional):') || '');
+  gravar(updateDoc(doc(db, 'checklists', id), { ['andamento.' + k]: { st: sel.value, obs, por: me.nome, em: new Date().toISOString() } }), 'Andamento atualizado'); setTimeout(render, 700);
+});
 BIND.checklist = () => {
   document.querySelectorAll('[data-tipo]').forEach(b => b.onclick = () => { ui.ckTipo = b.dataset.tipo; ui.ckViatura = null; ui.ckItens = null; render(); });
   $('ckv').onchange = e => ui.ckViatura = e.target.value;
   $('ckobs').oninput = e => ui.ckObs = e.target.value;
-  document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { ui.ckItens[+b.dataset.i].s = b.dataset.s; render(); });
+  document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { const it = ui.ckItens[+b.dataset.i]; it.s = b.dataset.s; if (it.s === 'ok') it.o = ''; render(); });
   document.querySelectorAll('[data-obs]').forEach(inp => inp.oninput = () => ui.ckItens[+inp.dataset.obs].o = inp.value);
   $('ckEnviar').onclick = () => {
     if (!ui.ckViatura) { alertaErro('Nenhuma viatura cadastrada para este tipo.'); return; }
@@ -423,7 +428,9 @@ VIEWS.painel = async () => {
   const hoje = diaStr();
   const [cks, mts, inters, escHoje] = await Promise.all([doDia('checklists', hoje), doDia('materiais', hoje), doMes('intercorrencias', mesStr()), equipeDoDia(hoje).catch(() => [])]);
   const vs = viaturas();
-  const pend = cks.flatMap(c => pendencias(c).map(i => ({ ...i, c })));
+  const pendTodas = cks.flatMap(c => (c.itens || []).map((i, k) => ({ ...i, k, c, a: (c.andamento || {})[k] })).filter(i => i.s !== 'ok'));
+  const pend = pendTodas.filter(p => !p.a || p.a.st !== 'Resolvido');
+  const resolvidas = pendTodas.length - pend.length;
   const baixos = mts.flatMap(m => abaixoMin(m).map(b => ({ ...b, m })));
   const interH = inters.filter(i => i.dia === hoje);
   const envios = [...cks.map(c => ({ q: c.quando, t: `Checklist ${c.viatura}`, u: c.userNome })), ...mts.map(m => ({ q: m.quando, t: `Contagem ${m.viatura} (${m.momento})`, u: m.userNome })), ...interH.map(i => ({ q: i.quando, t: `Intercorrência ${i.viatura}`, u: i.userNome }))].sort((a, b) => porQuando({ quando: a.q }, { quando: b.q })).slice(0, 10);
@@ -444,7 +451,7 @@ VIEWS.painel = async () => {
   <div class="card"><h2>Escala de hoje (${escHoje.length})</h2>${listaEquipe(escHoje)}</div>
   <div class="grid2">
     <div class="card"><h2>Situação das viaturas</h2>${vs.map(v => { const s = statusV(v); return `<div class="viat"><div><b>${esc(v.id)}</b><br><span class="small muted">${s.ck ? 'Último checklist: ' + fmt(s.ck.quando) + ' · ' + esc(s.ck.userNome) : 'Sem checklist hoje'}</span></div>${s.pill}</div>`; }).join('')}</div>
-    <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span></div><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${SITU[p.s] || p.s}</span></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}</div></div>
+    <div class="card"><h2>Pendências de hoje</h2>${pend.length || baixos.length ? pend.map(p => `<div class="viat"><div><b>${esc(p.n)}</b><br><span class="small muted">${esc(p.c.viatura)} · ${esc(p.o || 'sem observação')}</span>${p.a ? `<br><span class="small muted">${esc(p.a.st)}${p.a.obs ? ': ' + esc(p.a.obs) : ''} · ${esc(p.a.por)}</span>` : ''}</div><div style="display:grid;gap:4px;justify-items:end"><span class="pill ${p.s === 'falta' ? 'bad' : 'warn'}">${SITU[p.s] || p.s}</span><select data-and="${p.c.id}|${p.k}" aria-label="Andamento">${['Pendente', 'Em andamento', 'Resolvido'].map(o => `<option ${(p.a?.st || 'Pendente') === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>`).join('') + baixos.map(b => `<div class="viat"><div><b>${esc(b.n)}</b><br><span class="small muted">${esc(b.m.viatura)} · ${b.q} (mínimo ${b.min})</span></div><span class="pill bad">⚠ Abaixo do mínimo</span></div>`).join('') : '<p class="empty">Nenhuma pendência hoje.</p>'}${resolvidas ? `<p class="small muted">${resolvidas} resolvida(s) hoje (aparecem no relatório).</p>` : ''}</div></div>
   <div class="grid2">
     <div class="card"><h2>Intercorrências do mês</h2>${inters.slice(0, 5).map(i => `<div><p class="small muted">${fmt(i.quando)} · ${esc(i.viatura)} · ${esc(i.userNome)} ${gravPill(i.gravidade)}</p><p>${esc(i.texto)}</p></div>`).join('') || '<p class="empty">Nenhuma.</p>'}</div>
     <div class="card"><h2>Envios de hoje</h2>${envios.map(e => `<div class="viat"><span>${esc(e.t)}<br><span class="small muted">${esc(e.u)}</span></span><span class="small muted">${fmt(e.q)}</span></div>`).join('') || '<p class="empty">Nada enviado hoje.</p>'}</div></div>`;
@@ -586,7 +593,7 @@ VIEWS.relatorios = async () => {
   let so = [];
   so = await q('solicitacoes');
   const tab_ = [
-    ...ck.map(c => [c.quando, 'Checklist', c.viatura, c.userNome, pendencias(c).length ? pendencias(c).map(p => `${(SITU[p.s] || p.s).replace('⚠ ', '').toUpperCase()}: ${p.n}${p.o ? ' (' + p.o + ')' : ''}`).join('; ') : 'Tudo OK']),
+    ...ck.map(c => [c.quando, 'Checklist', c.viatura, c.userNome, pendencias(c).length ? (c.itens || []).map((p, k) => ({ ...p, a: (c.andamento || {})[k] })).filter(p => p.s !== 'ok').map(p => `${(SITU[p.s] || p.s).replace('⚠ ', '').toUpperCase()}: ${p.n}${p.o ? ' (' + p.o + ')' : ''}${p.a ? ' [' + p.a.st + (p.a.obs ? ': ' + p.a.obs : '') + ']' : ''}`).join('; ') : 'Tudo OK']),
     ...mt.map(m => { const b = abaixoMin(m); return [m.quando, 'Contagem de material', m.viatura, m.userNome, `${m.momento} do plantão` + (b.length ? ' · abaixo do mínimo: ' + b.map(x => `${x.n} (${x.q}/${x.min})`).join(', ') : '')]; }),
     ...it.map(i => [i.quando, 'Intercorrência', i.viatura, i.userNome, `${i.tipo} · ${i.gravidade}: ${i.texto}`]),
     ...so.map(s => [s.quando, 'Ofício', s.numero, s.criadoPorNome || 'Coordenação', s.decisao + (s.motivosNomes?.length ? ': ' + s.motivosNomes.join(', ') : '') + ' · ' + s.setor])

@@ -117,6 +117,7 @@ await step('plantonista: lança extra e troca', async () => {
 await sair();
 await step('coordenador: painel com pendências', async () => {
   await login('coord@teste.com', 'coord123'); await page.waitForSelector('text=Cilindro vazio'); await page.waitForSelector('text=⚠ Abaixo do mínimo'); await shot('10-coord-painel');
+  page.once('dialog', d => d.accept('Pedido feito')); await page.selectOption('[data-and]', 'Em andamento'); await page.waitForSelector('text=Em andamento: Pedido feito', { timeout: 10000 });
 });
 await step('coordenador vê trocas e extras', async () => { await tab('Escala'); await page.waitForSelector('text=Lançado por Carla Mendes'); await page.waitForSelector('.pill:has-text("extra")'); await shot('09c-coord-trocas'); });
 await step('coordenador: negativa com ofício PDF', async () => {

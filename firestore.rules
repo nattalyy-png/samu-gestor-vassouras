@@ -65,7 +65,9 @@ service cloud.firestore {
     match /checklists/{id} {
       allow read: if isGestao() || dono();
       allow create: if novoRegistro();
-      allow update, delete: if isAdmin();
+      // gestão marca o andamento das pendências; admin corrige o resto
+      allow update: if isAdmin() || (isGestao() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['andamento']));
+      allow delete: if isAdmin();
     }
     match /materiais/{id} {
       allow read: if isGestao() || dono();
