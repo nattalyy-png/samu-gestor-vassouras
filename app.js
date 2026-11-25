@@ -648,13 +648,19 @@ VIEWS.funcionarios = async () => {
   const semCad = rows(await getDocs(query(C('escala'), where('user', '==', null))));
   const mapa = new Map();
   semCad.forEach(e => { const k = e.nomeEscala || normNome(e.userNome); if (!cadastrados.has(k) && !mapa.has(k)) mapa.set(k, { nome: nomeBonito(e.userNome), cargo: e.cargo || '', n: 0 }); if (mapa.has(k)) mapa.get(k).n++; });
-  ui.pre = [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+  ui.pre = [...mapa.entries()].map(([k, v]) => ({ ...v, chave: k })).sort((a, b) => a.nome.localeCompare(b.nome));
+  // sugere quem já tem cadastro com nome parecido (ex.: "Camillo" x "Camilo", nome abreviado)
+  const simples = t => normNome(t).replace(/(.)\1/g, '$1').split(' ').filter(w => w.length > 2);
+  const parecido = (a, b) => { const x = simples(a), y = simples(b); if (!x.length || !y.length) return 0; const comuns = x.filter(w => y.includes(w)).length; return (x[0] === y[0] ? 2 : 0) + comuns; };
+  ui.pre.forEach(p => { let best = null, sc = 0; eq.forEach(u => { const v = parecido(p.nome, u.nome); if (v > sc) { sc = v; best = u; } }); p.sugestao = sc >= 3 ? best : null; });
   return `<h1>Funcionários</h1>
   ${ui.pre.length ? `<div class="card"><h2>Pré-cadastro da escala (${ui.pre.length} pessoas)</h2>
   <p class="small muted">Estas pessoas estão na escala mas ainda não têm acesso. Confira o cargo, digite o e-mail e clique em Cadastrar: a pessoa recebe o e-mail para criar a senha e os plantões dela já ficam ligados.</p>
-  <div class="tablewrap"><table><tr><th>Nome (como na escala)</th><th>Cargo</th><th>E-mail</th><th>Perfil</th><th></th></tr>
+  <div class="tablewrap"><table><tr><th>Nome (como na escala)</th><th>Cargo</th><th>E-mail</th><th>Perfil</th><th></th><th>Ou já tem cadastro?</th></tr>
   ${ui.pre.map((p, i) => `<tr><td><b>${esc(p.nome)}</b><br><span class="small muted">${p.n} plantão(ões)</span></td><td><input id="pf${i}" value="${esc(p.cargo)}" style="min-width:150px"></td><td><input id="pe${i}" type="email" placeholder="email@exemplo.com" style="min-width:200px"></td>
-  <td><select id="pp${i}" style="width:auto">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></td><td><button class="primary" data-pre="${i}">Cadastrar</button></td></tr>`).join('')}</table></div></div>` : ''}
+  <td><select id="pp${i}" style="width:auto">${perfis.map(x => `<option value="${x}">${perfilNome(x)}</option>`).join('')}</select></td><td><button class="primary" data-pre="${i}">Cadastrar</button></td>
+  <td><div class="row" style="flex-wrap:nowrap"><select id="pl${i}" style="width:auto;max-width:190px"><option value="">— escolher —</option>${eq.map(u => `<option value="${u.id}" ${p.sugestao && p.sugestao.id === u.id ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select><button data-ligar="${i}">Ligar</button></div>${p.sugestao ? `<span class="small" style="color:var(--warn)">⚠ Parece ser ${esc(p.sugestao.nome)}</span>` : ''}</td></tr>`).join('')}</table></div>
+  <p class="small muted">Se a pessoa já foi cadastrada com o nome escrito diferente (ex.: Camillo × Camilo), escolha o cadastro dela em "Ou já tem cadastro?" e clique em Ligar. Os plantões passam para ela na hora, sem novo e-mail.</p></div>` : ''}
   <div class="card"><h2>Cadastrar funcionário</h2><div class="grid2"><label>Nome<input id="fn"></label><label>E-mail<input id="fe" type="email"></label><label>Função<input id="ff" placeholder="Ex.: Técnico de enfermagem"></label>
   <label>Perfil<select id="fp">${perfis.map(p => `<option value="${p}">${perfilNome(p)}</option>`).join('')}</select></label></div>
   <button class="primary" id="fAdd">Cadastrar e enviar e-mail de senha</button>
@@ -692,6 +698,17 @@ BIND.funcionarios = () => {
     try { await cadastrarFuncionario(nome, email, funcao, perfil); toast(`${nome} cadastrado(a). E-mail de senha enviado.`); render(); }
     catch (e) { alertaErro(msgErro(e)); btn.disabled = false; btn.textContent = 'Cadastrar e enviar e-mail de senha'; }
   };
+  document.querySelectorAll('[data-ligar]').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.ligar, p = ui.pre[i], u = ui.equipe.find(x => x.id === $('pl' + i).value);
+    if (!u) { alertaErro('Escolha o cadastro da pessoa.'); return; }
+    b.disabled = true;
+    try {
+      const pend = rows(await getDocs(query(C('escala'), where('nomeEscala', '==', p.chave)))).filter(x => !x.user);
+      for (let k = 0; k < pend.length; k += 400) { const bt = writeBatch(db); pend.slice(k, k + 400).forEach(x => bt.update(doc(db, 'escala', x.id), { user: u.id, userNome: u.nome })); await bt.commit(); }
+      registrarAcao(`Ligou ${pend.length} plantão(ões) de "${p.nome}" ao cadastro de ${u.nome}`);
+      toast(`${pend.length} plantão(ões) ligados a ${u.nome}.`); render();
+    } catch (e) { alertaErro(msgErro(e)); b.disabled = false; }
+  });
   document.querySelectorAll('[data-pre]').forEach(b => b.onclick = async () => {
     const i = +b.dataset.pre, p = ui.pre[i];
     const email = $('pe' + i).value.trim().toLowerCase(), funcao = $('pf' + i).value.trim(), perfil = $('pp' + i).value;

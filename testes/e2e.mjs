@@ -62,6 +62,12 @@ if (process.env.ESCALA_PDF) await step('pré-cadastro a partir da escala', async
   await page.fill('#pe0', 'pessoa0@teste.com'); await page.click('[data-pre="0"]');
   await page.waitForSelector('h2:has-text("Pré-cadastro da escala (26 pessoas)")', { timeout: 15000 });
 });
+if (process.env.ESCALA_PDF) await step('ligar nome escrito diferente (Camillo)', async () => {
+  await page.fill('#fn', 'Camillo Vasconcellos'); await page.fill('#fe', 'camillo@teste.com'); await page.click('#fAdd');
+  await page.waitForSelector('td:has-text("camillo@teste.com")', { timeout: 15000 });
+  const row = page.locator('tr', { hasText: 'Camilo Vasconcellos' }); await row.locator('text=Parece ser Camillo').waitFor();
+  await row.locator('[data-ligar]').click(); await page.waitForSelector('h2:has-text("Pré-cadastro da escala (25 pessoas)")', { timeout: 15000 });
+});
 await step('admin vê aba de solicitações', async () => { await page.waitForSelector('[data-tab="solicitacoes"]'); });
 await step('admin cópia de segurança', async () => { await tab('Cópia de segurança'); const [d] = await Promise.all([page.waitForEvent('download'), page.click('#bkBaixar')]); await d.saveAs(`${SHOTS}/backup.json`); });
 await sair();
