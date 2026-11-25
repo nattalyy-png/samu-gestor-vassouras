@@ -53,6 +53,10 @@ await step('cadastro liga plantões da escala', async () => {
   await page.click('#fAdd'); await page.waitForSelector('td:has-text("fulano@teste.com")', { timeout: 15000 });
   await tab('Escala'); if (await page.$('.pill:has-text("sem cadastro")')) throw new Error('ainda sem cadastro');
 });
+if (process.env.ESCALA_PDF) await step('admin importa o PDF da escala', async () => {
+  await tab('Escala'); await page.setInputFiles('#eArq', process.env.ESCALA_PDF);
+  await page.waitForSelector('h2:has-text("(186 plantões)")', { timeout: 30000 }); await shot('04c-escala-pdf');
+});
 await step('admin vê aba de solicitações', async () => { await page.waitForSelector('[data-tab="solicitacoes"]'); });
 await step('admin cópia de segurança', async () => { await tab('Cópia de segurança'); const [d] = await Promise.all([page.waitForEvent('download'), page.click('#bkBaixar')]); await d.saveAs(`${SHOTS}/backup.json`); });
 await sair();

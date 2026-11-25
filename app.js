@@ -3,6 +3,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, connectFirestoreEmulator, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, serverTimestamp, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { lerEscalaPDF } from "./escala-parser.js";
 
 /* ================= utilidades ================= */
 const app = document.getElementById('app');
@@ -49,6 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
 const PADRAO = {
@@ -589,8 +591,8 @@ VIEWS.escalaGeral = async () => {
     <button class="primary" id="eAdd">Lançar</button>
     <p class="small muted">Digite os dias separados por vírgula.</p></div>
   <div class="card"><h2>Importar escala do mês</h2>
-    <p class="small muted">Use o arquivo de escala preparado a partir do PDF (.json). O app liga cada plantão ao funcionário cujo <b>nome completo</b> no cadastro é igual ao da escala (acentos e maiúsculas não importam). Quem ainda não tem cadastro fica como "sem cadastro" e é ligado automaticamente quando for cadastrado com o mesmo nome. Importar de novo o mesmo mês substitui a importação anterior.</p>
-    <input type="file" id="eArq" accept=".json,application/json"><p id="eArqInfo" class="small"></p></div>
+    <p class="small muted">Escolha o <b>PDF da escala mensal</b> (o mesmo que a coordenação faz no Word e salva em PDF). O app lê os plantões de cada pessoa e liga cada plantão ao funcionário cujo <b>nome completo</b> no cadastro é igual ao da escala (acentos e maiúsculas não importam). Quem ainda não tem cadastro fica como "sem cadastro" e é ligado automaticamente quando for cadastrado com o mesmo nome. Importar de novo o mesmo mês substitui a importação anterior.</p>
+    <input type="file" id="eArq"><p id="eArqInfo" class="small"></p></div>
   <div class="card"><div class="row" style="justify-content:space-between"><button id="mAnt">‹ Anterior</button><h2>${fmtMes(ui.escMes)} (${lista.length} plantões)</h2><button id="mProx">Próximo ›</button></div>
   ${semCad.length ? `<p class="small"><span class="pill bad">⚠ ${semCad.length} nome(s) da escala sem cadastro</span> ${esc(semCad.join(', '))}. Cadastre em Funcionários com o nome completo igual ao da escala.</p>` : ''}
   <div class="tablewrap"><table><tr><th>Data</th><th>Funcionário</th><th>Turno</th><th>Viatura</th><th></th></tr>${lista.map(e => `<tr><td class="num">${fmtDia(e.data)}</td><td>${esc(e.userNome)}${e.user ? '' : ' <span class="pill bad">⚠ sem cadastro</span>'}</td><td>${esc(e.turno)}</td><td>${esc(e.viatura)}</td><td><button class="ghost" data-del="${e.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum plantão lançado neste mês.</td></tr>'}</table></div></div>`;
@@ -603,7 +605,8 @@ BIND.escalaGeral = () => {
     const f = e.target.files[0]; if (!f) return;
     const info = $('eArqInfo');
     try {
-      const dados = JSON.parse(await f.text());
+      const info0 = $('eArqInfo'); info0.textContent = 'Lendo o arquivo…';
+      const dados = /\.pdf$/i.test(f.name) || f.type === 'application/pdf' ? await lerPdf(f) : JSON.parse(await f.text());
       if (!dados.mes || !Array.isArray(dados.itens)) throw new Error('Arquivo de escala inválido.');
       info.textContent = 'Importando…';
       const eq = await equipe();
@@ -614,10 +617,18 @@ BIND.escalaGeral = () => {
       for (let i = 0; i < ops.length; i += 400) { const b = writeBatch(db); ops.slice(i, i + 400).forEach(op => op(b)); await b.commit(); }
       const lig = new Set(dados.itens.filter(it => achar(it.nome)).map(it => normNome(it.nome))).size, tot = new Set(dados.itens.map(it => normNome(it.nome))).size;
       registrarAcao(`Importou escala de ${fmtMes(dados.mes)} (${dados.itens.length} plantões)`);
-      toast(`${dados.itens.length} plantões importados. ${lig} de ${tot} pessoas ligadas a um cadastro.`);
+      toast(`${dados.itens.length} plantões de ${fmtMes(dados.mes)} importados. ${lig} de ${tot} pessoas já ligadas a um cadastro.`);
       ui.escMes = dados.mes; render();
     } catch (err) { info.textContent = ''; alertaErro(msgErro(err)); }
   };
+  async function lerPdf(f) {
+    if (!window.pdfjsLib) await new Promise((ok, erro) => { const sc = document.createElement('script'); sc.src = PDFJS + 'pdf.min.js'; sc.onload = ok; sc.onerror = () => erro(new Error('Não consegui carregar o leitor de PDF. Verifique a internet.')); document.head.appendChild(sc); });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+    const paginas = []; let todo = '';
+    for (let i = 1; i <= pdf.numPages; i++) { const tc = await (await pdf.getPage(i)).getTextContent(); paginas.push(tc.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width }))); todo += tc.items.map(it => it.str).join(' ') + '\n'; }
+    return lerEscalaPDF(paginas, todo);
+  }
   $('eAdd').onclick = async () => {
     const u = ui.equipe.find(x => x.id === $('eu').value); if (!u) { alertaErro('Cadastre funcionários primeiro.'); return; }
     const [y, m] = ui.escMes.split('-').map(Number); const max = new Date(y, m, 0).getDate();
