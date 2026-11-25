@@ -50,6 +50,7 @@ catch (e) { db = initializeFirestore(fb, {}); }
 const EMU = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulador');
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 const C = name => collection(db, name);
+const VERSAO = '25/11 15h45';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 
 /* ================= listas padrão (EXEMPLOS: trocar pelas listas reais do coordenador) ================= */
@@ -151,7 +152,7 @@ async function renderLogin() {
       <p id="serro" class="err small" hidden></p>
       <button class="primary" type="submit">Criar conta da administração</button>
     </form>` : ''}
-    <p class="rodape">Cada funcionário tem seu próprio acesso.<br>O coordenador entra pelo mesmo login e vê o painel completo.</p>
+    <p class="rodape">Cada funcionário tem seu próprio acesso.<br>O coordenador entra pelo mesmo login e vê o painel completo.<br><small style="opacity:.6">Versão ${VERSAO}</small></p>
   </div></div>`;
   $('flogin').onsubmit = async e => {
     e.preventDefault(); $('lerro').hidden = true;
@@ -190,7 +191,7 @@ async function render() {
     app.innerHTML = `<div class="shell">
     <aside class="side"><div class="marca"><img src="logo-simbolo.png" alt=""><div><b>SAMU Vassouras</b><small>${esc(perfilNome(me.perfil))}</small></div></div>
       ${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}
-      <div class="quem"><span>${esc(me.nome)}</span>${seletorModo(true)}<button id="sair">Sair</button></div></aside>
+      <div class="quem"><span>${esc(me.nome)}</span><small style="opacity:.6">Versão ${VERSAO}</small>${seletorModo(true)}<button id="sair">Sair</button></div></aside>
     <div style="flex:1;min-width:0"><div class="topo-gestao"><div class="linha"><img src="logo-simbolo.png" alt=""><b>SAMU Vassouras</b>${seletorModo(true).replace('id="modoSel"', 'id="modoSel2"')}<button id="sair2">Sair</button></div>
       <nav>${tabs.map(([k, l]) => `<button data-tab="${k}" aria-current="${k === tab}">${l}</button>`).join('')}</nav></div>
     ${aviso}<main id="main"><div class="spinner">Carregando…</div></main></div></div>`;
